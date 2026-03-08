@@ -1,0 +1,64 @@
+# ─── Environment / Secrets ───────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ─── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyo
+
+# ─── Node / Frontend ─────────────────────────────────────────────
+node_modules/
+dist/
+.vite/
+*.local
+
+# ─── Runtime Data ────────────────────────────────────────────────
+backend/uploads/*
+backend/outputs/*
+backend/data/*
+!backend/uploads/.gitkeep
+!backend/outputs/.gitkeep
+!backend/data/.gitkeep
+uploads/*
+outputs/*
+data/*
+!uploads/.gitkeep
+!outputs/.gitkeep
+!data/.gitkeep
+.tmp/
+
+# ─── Database ────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDE ─────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ─── Misc ────────────────────────────────────────────────────────
+*.bak
+*.tmp

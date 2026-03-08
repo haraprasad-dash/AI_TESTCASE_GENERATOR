@@ -1,0 +1,354 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .app-container {
+    @apply min-h-screen w-full;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    background-attachment: fixed;
+  }
+  
+  .main-wrapper {
+    @apply w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+  }
+  
+  .content-card {
+    @apply bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl;
+    @apply border border-white/50;
+    @apply transition-all duration-300;
+  }
+  
+  .content-card:hover {
+    @apply shadow-2xl;
+    transform: translateY(-2px);
+  }
+  
+  .section-header {
+    @apply flex items-center gap-3 mb-6;
+  }
+  
+  .section-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center shadow-lg;
+  }
+  
+  .section-title {
+    @apply text-xl font-bold text-slate-900;
+  }
+  
+  .section-subtitle {
+    @apply text-sm text-slate-500;
+  }
+  
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold;
+    @apply shadow-lg shadow-blue-500/30;
+    @apply transition-all duration-200;
+    @apply hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl hover:shadow-blue-500/40;
+    @apply hover:-translate-y-0.5;
+    @apply active:translate-y-0 active:shadow-lg;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/50;
+    @apply inline-flex items-center justify-center gap-2;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2 bg-white text-slate-700 rounded-xl font-medium;
+    @apply border border-slate-200 shadow-sm;
+    @apply transition-all duration-200;
+    @apply hover:bg-slate-50 hover:border-slate-300;
+    @apply focus:outline-none focus:ring-2 focus:ring-slate-500/20;
+    @apply inline-flex items-center justify-center gap-2;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl;
+    @apply text-slate-900 placeholder:text-slate-400;
+    @apply transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 focus:bg-white;
+    @apply hover:border-slate-300;
+  }
+  
+  .input-label {
+    @apply block text-sm font-semibold text-slate-700 mb-2;
+  }
+  
+  .dropzone {
+    @apply border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center;
+    @apply transition-all duration-300 cursor-pointer bg-slate-50/50;
+    @apply hover:border-blue-400 hover:bg-blue-50/50;
+  }
+  
+  .dropzone-active {
+    @apply border-blue-500 bg-blue-100;
+  }
+  
+  .file-item {
+    @apply flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3;
+    @apply border border-slate-200 transition-all duration-200;
+    @apply hover:bg-slate-100 hover:border-slate-300;
+  }
+  
+  .tab-group {
+    @apply flex bg-slate-100 rounded-xl p-1;
+  }
+  
+  .tab-btn {
+    @apply flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+    @apply text-slate-600 hover:text-slate-900;
+  }
+  
+  .tab-btn-active {
+    @apply bg-white text-blue-600 shadow-sm;
+  }
+  
+  .modal-overlay {
+    @apply fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50;
+    @apply flex items-center justify-center p-4;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+
+/* Range Slider */
+input[type="range"] {
+  @apply w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-5 h-5 bg-blue-600 rounded-full shadow-lg;
+  @apply transition-transform duration-200;
+  @apply hover:scale-110 hover:bg-blue-700;
+}
+
+/* Markdown */
+.prose pre {
+  @apply bg-slate-900 text-slate-50 rounded-xl p-4 overflow-x-auto;
+}
+
+.prose code {
+  @apply bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-sm;
+}
+
+/* ── Markdown body renderer ─────────────────────────────── */
+.markdown-body {
+  color: #1e293b;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.markdown-body h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+.markdown-body h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin: 1.4rem 0 0.6rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #bfdbfe;
+}
+.markdown-body h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #334155;
+  margin: 1.2rem 0 0.5rem;
+}
+.markdown-body h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #475569;
+  margin: 1rem 0 0.4rem;
+}
+
+.markdown-body p {
+  margin: 0.6rem 0;
+}
+
+.markdown-body strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.markdown-body em {
+  font-style: italic;
+  color: #475569;
+}
+
+.markdown-body ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.markdown-body ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.markdown-body li {
+  margin: 0.25rem 0;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: 0.15rem 0;
+}
+
+.markdown-body blockquote {
+  border-left: 4px solid #93c5fd;
+  background: #eff6ff;
+  color: #475569;
+  padding: 0.5rem 1rem;
+  margin: 0.75rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: italic;
+}
+
+.markdown-body code {
+  background: #f1f5f9;
+  color: #0f172a;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.85em;
+  border: 1px solid #e2e8f0;
+}
+
+.markdown-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.markdown-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 2px solid #e2e8f0;
+  margin: 1.5rem 0;
+}
+
+/* Tables */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08);
+}
+.markdown-body thead tr {
+  background: #1d4ed8;
+  color: #fff;
+}
+.markdown-body thead th {
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.markdown-body tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+.markdown-body tbody tr:hover {
+  background: #eff6ff;
+}
+.markdown-body td {
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+.markdown-body tbody tr:last-child td {
+  border-bottom: none;
+}

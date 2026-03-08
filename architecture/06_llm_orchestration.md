@@ -1,0 +1,493 @@
+# SOP 06: LLM Orchestration
+
+## Goal
+Abstract LLM providers (Groq and Ollama) behind a unified interface.
+
+## Layer
+Layer 3: Tools (`backend/app/services/llm_orchestrator.py`)
+
+## Providers
+
+### Groq (Cloud)
+- Fast inference on cloud GPUs
+- Models: llama-3.3-70b, llama-3.1-8b, mixtral-8x7b
+- Requires API key
+
+### Ollama (Local)
+- Privacy-focused, offline capable
+- Local models (llama3.1, etc.)
+- Requires Ollama server running
+
+## Implementation
+
+### LLM Orchestrator (`services/llm_orchestrator.py`)
+
+```python
+"""
+LLM Orchestrator - Unified interface for Groq and Ollama providers.
+"""
+import os
+import httpx
+from abc import ABC, abstractmethod
+from typing import AsyncIterator, Optional, List, Dict, Any
+from dataclasses import dataclass
+from enum import Enum
+
+import groq
+from groq import Groq
+
+
+class ProviderType(str, Enum):
+    GROQ = "groq"
+    OLLAMA = "ollama"
+
+
+@dataclass
+class LLMResponse:
+    """Standardized LLM response."""
+    content: str
+    model: str
+    provider: ProviderType
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+
+
+@dataclass
+class LLMConfig:
+    """Configuration for LLM generation."""
+    provider: ProviderType
+    model: str
+    temperature: float = 0.2
+    max_tokens: int = 4096
+    # Provider-specific settings
+    api_key: Optional[str] = None  # For Groq
+    base_url: Optional[str] = None  # For Ollama
+
+
+class LLMProvider(ABC):
+    """Abstract base class for LLM providers."""
+    
+    @abstractmethod
+    async def generate(self, prompt: str, system_prompt: Optional[str] = None) -> LLMResponse:
+        """Generate text from prompt."""
+        pass
+    
+    @abstractmethod
+    async def generate_stream(
+        self, prompt: str, system_prompt: Optional[str] = None
+    ) -> AsyncIterator[str]:
+        """Generate text as a stream."""
+        pass
+    
+    @abstractmethod
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test provider connectivity."""
+        pass
+    
+    @abstractmethod
+    async def list_models(self) -> List[str]:
+        """List available models."""
+        pass
+
+
+class GroqProvider(LLMProvider):
+    """Groq cloud provider implementation."""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = Groq(api_key=api_key)
+    
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model: str = "llama-3.3-70b-versatile",
+        temperature: float = 0.2,
+        max_tokens: int = 4096
+    ) -> LLMResponse:
+        """Generate using Groq API."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            return LLMResponse(
+                content=response.choices[0].message.content,
+                model=model,
+                provider=ProviderType.GROQ,
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens
+            )
+            
+        except groq.AuthenticationError as e:
+            raise LLMError(f"Groq authentication failed: {e}")
+        except groq.RateLimitError as e:
+            raise LLMError(f"Groq rate limit exceeded: {e}")
+        except Exception as e:
+            raise LLMError(f"Groq generation failed: {e}")
+    
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model: str = "llama-3.3-70b-versatile",
+        temperature: float = 0.2,
+        max_tokens: int = 4096
+    ) -> AsyncIterator[str]:
+        """Generate streaming response from Groq."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            stream = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            raise LLMError(f"Groq stream failed: {e}")
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Groq connection."""
+        try:
+            # Try to list models
+            models = self.client.models.list()
+            return {
+                "status": "connected",
+                "provider": "groq",
+                "available_models": len(models.data)
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "provider": "groq",
+                "error": str(e)
+            }
+    
+    async def list_models(self) -> List[str]:
+        """List available Groq models."""
+        try:
+            models = self.client.models.list()
+            return [m.id for m in models.data]
+        except Exception as e:
+            raise LLMError(f"Failed to list Groq models: {e}")
+
+
+class OllamaProvider(LLMProvider):
+    """Ollama local provider implementation."""
+    
+    def __init__(self, base_url: str = "http://localhost:11434"):
+        self.base_url = base_url.rstrip("/")
+    
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model: str = "llama3.1",
+        temperature: float = 0.2,
+        max_tokens: int = 4096
+    ) -> LLMResponse:
+        """Generate using Ollama API."""
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": full_prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": temperature,
+                            "num_predict": max_tokens
+                        }
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                return LLMResponse(
+                    content=data.get("response", ""),
+                    model=model,
+                    provider=ProviderType.OLLAMA,
+                    prompt_tokens=data.get("prompt_eval_count"),
+                    completion_tokens=data.get("eval_count"),
+                    total_tokens=(data.get("prompt_eval_count", 0) + data.get("eval_count", 0))
+                )
+                
+        except httpx.ConnectError:
+            raise LLMError(f"Cannot connect to Ollama at {self.base_url}. Is it running?")
+        except Exception as e:
+            raise LLMError(f"Ollama generation failed: {e}")
+    
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        model: str = "llama3.1",
+        temperature: float = 0.2,
+        max_tokens: int = 4096
+    ) -> AsyncIterator[str]:
+        """Generate streaming response from Ollama."""
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": full_prompt,
+                        "stream": True,
+                        "options": {
+                            "temperature": temperature,
+                            "num_predict": max_tokens
+                        }
+                    }
+                ) as response:
+                    response.raise_for_status()
+                    
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            import json
+                            try:
+                                data = json.loads(line)
+                                if "response" in data:
+                                    yield data["response"]
+                            except json.JSONDecodeError:
+                                pass
+                                
+        except Exception as e:
+            raise LLMError(f"Ollama stream failed: {e}")
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Ollama connection."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+                models = data.get("models", [])
+                
+                return {
+                    "status": "connected",
+                    "provider": "ollama",
+                    "available_models": len(models),
+                    "models": [m.get("name") for m in models]
+                }
+                
+        except httpx.ConnectError:
+            return {
+                "status": "error",
+                "provider": "ollama",
+                "error": f"Cannot connect to Ollama at {self.base_url}"
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "provider": "ollama",
+                "error": str(e)
+            }
+    
+    async def list_models(self) -> List[str]:
+        """List available Ollama models."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+                return [m.get("name") for m in data.get("models", [])]
+                
+        except Exception as e:
+            raise LLMError(f"Failed to list Ollama models: {e}")
+
+
+class LLMError(Exception):
+    """Base exception for LLM errors."""
+    pass
+
+
+class LLMOrchestrator:
+    """Orchestrator for LLM providers."""
+    
+    def __init__(self, config: LLMConfig):
+        self.config = config
+        self._provider: Optional[LLMProvider] = None
+        self._init_provider()
+    
+    def _init_provider(self):
+        """Initialize the appropriate provider."""
+        if self.config.provider == ProviderType.GROQ:
+            api_key = self.config.api_key or os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise LLMError("Groq API key not provided")
+            self._provider = GroqProvider(api_key)
+            
+        elif self.config.provider == ProviderType.OLLAMA:
+            base_url = self.config.base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            self._provider = OllamaProvider(base_url)
+            
+        else:
+            raise LLMError(f"Unknown provider: {self.config.provider}")
+    
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None
+    ) -> LLMResponse:
+        """Generate text using configured provider."""
+        return await self._provider.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=self.config.model,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens
+        )
+    
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None
+    ) -> AsyncIterator[str]:
+        """Generate text stream using configured provider."""
+        async for chunk in self._provider.generate_stream(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=self.config.model,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens
+        ):
+            yield chunk
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test provider connection."""
+        return await self._provider.test_connection()
+    
+    async def list_models(self) -> List[str]:
+        """List available models."""
+        return await self._provider.list_models()
+
+
+def create_orchestrator(
+    provider: str,
+    model: Optional[str] = None,
+    temperature: float = 0.2,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None
+) -> LLMOrchestrator:
+    """Factory function to create orchestrator from settings."""
+    provider_type = ProviderType(provider)
+    
+    config = LLMConfig(
+        provider=provider_type,
+        model=model or ("llama-3.3-70b-versatile" if provider_type == ProviderType.GROQ else "llama3.1"),
+        temperature=temperature,
+        api_key=api_key,
+        base_url=base_url
+    )
+    
+    return LLMOrchestrator(config)
+```
+
+### API Router (`routers/llm.py`)
+
+```python
+"""
+LLM provider endpoints.
+"""
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict, Any, List
+from app.services.llm_orchestrator import (
+    create_orchestrator, LLMError, ProviderType
+)
+from app.config import get_settings
+
+router = APIRouter(prefix="/api/llm", tags=["llm"])
+
+
+@router.post("/test-connection")
+async def test_llm_connection(
+    provider: str = Query(..., enum=["groq", "ollama"])
+) -> Dict[str, Any]:
+    """Test LLM provider connection."""
+    settings = get_settings()
+    
+    try:
+        if provider == "groq":
+            orchestrator = create_orchestrator(
+                provider="groq",
+                api_key=settings.groq_api_key
+            )
+        else:
+            orchestrator = create_orchestrator(
+                provider="ollama",
+                base_url=settings.ollama_base_url
+            )
+        
+        result = await orchestrator.test_connection()
+        
+        if result.get("status") == "error":
+            raise HTTPException(503, result.get("error"))
+        
+        return result
+        
+    except LLMError as e:
+        raise HTTPException(503, str(e))
+
+
+@router.get("/models")
+async def list_models(
+    provider: str = Query(..., enum=["groq", "ollama"])
+) -> List[str]:
+    """List available models for provider."""
+    settings = get_settings()
+    
+    try:
+        if provider == "groq":
+            orchestrator = create_orchestrator(
+                provider="groq",
+                api_key=settings.groq_api_key
+            )
+        else:
+            orchestrator = create_orchestrator(
+                provider="ollama",
+                base_url=settings.ollama_base_url
+            )
+        
+        return await orchestrator.list_models()
+        
+    except LLMError as e:
+        raise HTTPException(503, str(e))
+```
+
+## Edge Cases
+1. **Groq rate limiting**: Implement retry with exponential backoff
+2. **Ollama not running**: Return clear error message
+3. **Model not found**: Validate model exists before generation
+4. **Streaming errors**: Handle partial failures in stream
+5. **Long prompts**: Truncate if exceeds model context window
