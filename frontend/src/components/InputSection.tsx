@@ -34,6 +34,18 @@ export const InputSection: React.FC<Props> = ({
   const [veStatus, setVeStatus] = useState<FetchStatus>('idle');
   const [veTicket, setVeTicket] = useState<any>(null);
 
+  const clearJiraTicket = () => {
+    setJiraId('');
+    setJiraStatus('idle');
+    setJiraTicket(null);
+  };
+
+  const clearValueEdgeTicket = () => {
+    setValueEdgeId('');
+    setVeStatus('idle');
+    setVeTicket(null);
+  };
+
   const fetchJiraTicket = async () => {
     if (!jiraId.trim()) { toast.error('Enter a JIRA Issue ID first'); return; }
     setJiraStatus('loading');
@@ -141,6 +153,16 @@ export const InputSection: React.FC<Props> = ({
                 : <Search className="w-4 h-4" />}
               Fetch
             </button>
+            {(jiraId.trim() || jiraStatus === 'success') && (
+              <button
+                type="button"
+                onClick={clearJiraTicket}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Remove
+              </button>
+            )}
           </div>
           {jiraStatus === 'success' && jiraTicket && (
             <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
@@ -185,6 +207,16 @@ export const InputSection: React.FC<Props> = ({
                 : <Search className="w-4 h-4" />}
               Fetch
             </button>
+            {(valueEdgeId.trim() || veStatus === 'success') && (
+              <button
+                type="button"
+                onClick={clearValueEdgeTicket}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Remove
+              </button>
+            )}
           </div>
           {veStatus === 'success' && veTicket && (
             <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">

@@ -13,6 +13,20 @@ import toast from 'react-hot-toast';
 import type { FileInput, GenerationInputs, GenerationConfiguration, GenerationResponse } from '../types';
 
 export const HomePage: React.FC = () => {
+  const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+
+  const isGroqRateLimitError = (message?: string) => {
+    const m = (message || '').toLowerCase();
+    return m.includes('rate limit') || m.includes('rate_limit_exceeded') || m.includes('error code: 429') || m.includes('tokens per day') || m.includes('tpd');
+  };
+
+  const friendlyGenerationError = (message?: string) => {
+    if (provider === 'groq' && isGroqRateLimitError(message)) {
+      return `Groq quota reached for model '${model}'. Retrying with '${GROQ_FALLBACK_MODEL}' or switch to Ollama.`;
+    }
+    return message || 'Generation failed';
+  };
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [output, setOutput] = useState<GenerationResponse | null>(null);
@@ -26,8 +40,11 @@ export const HomePage: React.FC = () => {
   const [provider, setProvider] = useState<'groq' | 'ollama'>('groq');
   const [model, setModel] = useState('llama-3.3-70b-versatile');
   const [temperature, setTemperature] = useState(0.2);
+  const [clarificationConversation, setClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
 
-  const hasInput = jiraId || valueEdgeId || uploadedFiles.length > 0;
+  const hasGenerationInput = Boolean(jiraId.trim() || valueEdgeId.trim() || uploadedFiles.length > 0);
+  // Keep welcome card stable while typing IDs to avoid layout-shift scroll jumps.
+  const showWelcomeCard = !output && uploadedFiles.length === 0;
 
   const handleFileUpload = (file: FileInput) => {
     setUploadedFiles((prev) => [...prev, file]);
@@ -38,8 +55,20 @@ export const HomePage: React.FC = () => {
     setUploadedFiles((prev) => prev.filter((f) => f.file_id !== fileId));
   };
 
-  const handleGenerate = async () => {
-    if (!hasInput) {
+  const handleClarificationFileUpload = async (files: File[]) => {
+    for (const file of files) {
+      try {
+        const response = await api.uploadFile(file);
+        setUploadedFiles((prev) => [...prev, response.data]);
+        toast.success(`Attached for clarification: ${file.name}`);
+      } catch (error: any) {
+        toast.error(`Failed to attach ${file.name}`);
+      }
+    }
+  };
+
+  const handleGenerate = async (clarificationAnswers?: unknown) => {
+    if (!hasGenerationInput) {
       toast.error('Please provide at least one input source');
       return;
     }
@@ -48,11 +77,42 @@ export const HomePage: React.FC = () => {
     setCurrentStep(3);
     
     try {
+      const clarificationText = typeof clarificationAnswers === 'string'
+        ? clarificationAnswers.trim()
+        : '';
+
+      let nextConversation = clarificationConversation;
+      if (clarificationText) {
+        const questions = output?.metadata?.clarification_questions || [];
+        nextConversation = [...clarificationConversation, { questions, answer: clarificationText }];
+        setClarificationConversation(nextConversation);
+      }
+
+      const conversationBlock = nextConversation.length > 0
+        ? [
+            'Clarification Conversation History:',
+            ...nextConversation.map((entry, idx) => {
+              const qText = entry.questions.length > 0
+                ? entry.questions.map((q, qIdx) => `${qIdx + 1}. ${q}`).join('\n')
+                : 'No explicit questions captured.';
+              return `Round ${idx + 1}\nQuestions:\n${qText}\nAnswer:\n${entry.answer}`;
+            })
+          ].join('\n\n')
+        : '';
+
+      const resolvedPrompt = [
+        customPrompt?.trim(),
+        conversationBlock,
+        clarificationText
+          ? `User Clarification Responses:\n${clarificationText}`
+          : ''
+      ].filter(Boolean).join('\n\n');
+
       const inputs: GenerationInputs = {
         jira_id: jiraId || undefined,
         valueedge_id: valueEdgeId || undefined,
         files: uploadedFiles,
-        custom_prompt: customPrompt || undefined,
+        custom_prompt: resolvedPrompt || undefined,
       };
 
       const configuration: GenerationConfiguration = {
@@ -63,15 +123,52 @@ export const HomePage: React.FC = () => {
       };
 
       const response = await api.generate(inputs, configuration);
-      setOutput(response.data);
+      let finalResponse = response.data;
+
+      // Auto-retry once on a fallback Groq model when selected model hits quota limits.
+      if (
+        response.data.status === 'failed' &&
+        provider === 'groq' &&
+        isGroqRateLimitError(response.data.error) &&
+        model !== GROQ_FALLBACK_MODEL
+      ) {
+        toast('Groq quota reached on selected model. Retrying with fallback model...', { icon: '⏳' });
+        const retryConfiguration: GenerationConfiguration = {
+          ...configuration,
+          model: GROQ_FALLBACK_MODEL,
+          max_tokens: 900,
+        };
+        const retry = await api.generate(inputs, retryConfiguration);
+        finalResponse = retry.data;
+        if (retry.data.status === 'completed') {
+          setModel(GROQ_FALLBACK_MODEL);
+          toast.success(`Switched to ${GROQ_FALLBACK_MODEL} and completed generation.`);
+        }
+      }
+
+      if (finalResponse.status === 'failed' && finalResponse.error) {
+        finalResponse.error = friendlyGenerationError(finalResponse.error);
+      }
+
+      setOutput(finalResponse);
       
-      if (response.data.status === 'completed') {
-        toast.success('Generation complete! 🎉');
-      } else if (response.data.error) {
-        toast.error(`Generation failed: ${response.data.error}`);
+      if (finalResponse.status === 'completed') {
+        if (finalResponse.metadata?.clarification_required) {
+          toast('Clarification needed. Please answer the questions and regenerate.', { icon: '📝' });
+        } else {
+          toast.success('Generation complete! 🎉');
+        }
+      } else if (finalResponse.error) {
+        toast.error(`Generation failed: ${finalResponse.error}`);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Generation failed');
+      const backendMessage =
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        (error?.code === 'ECONNABORTED' ? 'Generation request timed out. Please retry with a smaller scope or fewer inputs.' : null) ||
+        error?.message ||
+        'Generation failed';
+      toast.error(friendlyGenerationError(backendMessage));
       console.error(error);
     } finally {
       setIsGenerating(false);
@@ -154,8 +251,15 @@ export const HomePage: React.FC = () => {
 
       {/* Main Content */}
       <main className="main-wrapper">
+        {isGenerating && (
+          <div className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2">
+            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+            <span className="text-sm font-medium">Generating... Please wait</span>
+          </div>
+        )}
+
         {/* Welcome Card */}
-        {!hasInput && (
+        {showWelcomeCard && (
           <div className="content-card p-8 text-center mb-8 animate-fade-in">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/30">
               <Sparkles className="w-10 h-10 text-white" />
@@ -214,14 +318,16 @@ export const HomePage: React.FC = () => {
           <PromptSection
             value={customPrompt}
             onChange={setCustomPrompt}
+            provider={provider}
+            model={model}
           />
         </div>
 
         {/* Generate Button */}
         <div className="flex justify-center mb-8 animate-fade-in">
           <button
-            onClick={handleGenerate}
-            disabled={isGenerating || !hasInput}
+            onClick={() => handleGenerate()}
+            disabled={isGenerating}
             className="btn-primary text-lg px-12 py-4"
           >
             {isGenerating ? (
@@ -241,7 +347,14 @@ export const HomePage: React.FC = () => {
         {/* Output Preview */}
         {output && (
           <div className="content-card p-6 animate-fade-in">
-            <OutputPreview output={output} onRefresh={handleGenerate} isRefreshing={isGenerating} />
+            <OutputPreview
+              output={output}
+              onRefresh={() => handleGenerate()}
+              isRefreshing={isGenerating}
+              onSubmitClarification={(answers) => handleGenerate(answers)}
+              onUploadClarificationFiles={handleClarificationFileUpload}
+              clarificationHistory={clarificationConversation}
+            />
           </div>
         )}
       </main>

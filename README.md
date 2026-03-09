@@ -30,10 +30,10 @@
 ## ⚡ Quick Start (TL;DR)
 
 ```powershell
-# Terminal 1 — Backend (port 7000)
+# Terminal 1 — Backend (port 7010)
 cd backend
 .\venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --host 127.0.0.1 --port 7000
+uvicorn app.main:app --host 127.0.0.1 --port 7010
 
 # Terminal 2 — Frontend (port 3000)
 cd frontend
@@ -42,7 +42,7 @@ npm run dev
 
 Open **http://localhost:3000** in your browser.
 
-> **Windows Note:** Ports 8000 and 8080 are reserved by Windows `svchost`. Always use port **7000** for the backend.  
+> **Windows Note:** Ports 8000 and 8080 are reserved by Windows `svchost`. Use backend port **7010**.  
 > **Critical:** `frontend/.env` must have `VITE_API_URL=` (empty value) so all requests route through the Vite proxy.
 
 ---
@@ -80,6 +80,7 @@ Open **http://localhost:3000** in your browser.
 | Multi-Source Input | Combine JIRA, ValueEdge, and document uploads in one generation |
 | Fetch & Validate | Fetch button validates ticket/item IDs before generation |
 | AI-Powered Generation | LLM-driven extraction and structuring of test scenarios |
+| Clarification Workflow | UI asks follow-up questions when clarification is required before final case output |
 | Refresh Output | Re-generate without re-entering inputs using the Refresh button |
 | Multiple Export Formats | Markdown, PDF, Excel (styled), JSON, Gherkin (.feature) |
 | BDD-Ready Gherkin | Properly formatted Given/When/Then scenarios from table data |
@@ -184,7 +185,7 @@ VITE_API_URL=
 # Terminal 1 — Backend
 cd backend
 .\venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --host 127.0.0.1 --port 7000
+uvicorn app.main:app --host 127.0.0.1 --port 7010
 
 # Terminal 2 — Frontend
 cd frontend
@@ -196,9 +197,9 @@ npm run dev
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:3000 |
-| Backend API | http://localhost:7000 |
-| Swagger UI | http://localhost:7000/docs |
-| Health Check | http://localhost:7000/api/health |
+| Backend API | http://localhost:7010 |
+| Swagger UI | http://localhost:7010/docs |
+| Health Check | http://localhost:7010/api/health |
 
 ---
 
@@ -376,6 +377,8 @@ Max file size: 20MB per file. Max 5 files per generation.
 
 ### Groq Recommended Models
 
+The model list in UI is loaded dynamically from Groq live availability and known decommissioned model IDs are filtered.
+
 | Model | Speed | Quality |
 |-------|-------|---------|
 | `llama-3.3-70b-versatile` | Medium | Best |
@@ -425,11 +428,11 @@ ollama pull llama3.1        # 8B — better quality
 
 1. Verify backend is running:
    ```powershell
-   Invoke-WebRequest -Uri "http://localhost:7000/api/health" -UseBasicParsing
+   Invoke-WebRequest -Uri "http://localhost:7010/api/health" -UseBasicParsing
    ```
-2. On Windows — ports 8000 and 8080 are reserved by the OS. Use port **7000**.
+2. On Windows — ports 8000 and 8080 are reserved by the OS. Use port **7010**.
 3. Check `frontend/.env` has `VITE_API_URL=` (empty).
-4. Check `frontend/vite.config.ts` proxy target is `http://localhost:7000`.
+4. Check `frontend/vite.config.ts` proxy target is `http://localhost:7010`.
 5. Restart the Vite dev server after any `.env` changes.
 
 ### "GROQ_API_KEY not configured"
@@ -466,7 +469,7 @@ The backend `generation_service.py` reads the key from settings — this require
 # Backend debug logs
 cd backend
 .\venv\Scripts\Activate.ps1
-uvicorn app.main:app --log-level debug --host 127.0.0.1 --port 7000
+uvicorn app.main:app --log-level debug --host 127.0.0.1 --port 7010
 
 # Test individual connections
 python tools/test_groq_connection.py
@@ -534,7 +537,7 @@ AI_TESTCASE_GENERATOR/
 │   │   ├── services/api.ts           # Axios API client
 │   │   ├── store/settingsStore.ts    # Zustand state
 │   │   └── types/index.ts            # TypeScript types
-│   ├── vite.config.ts                # Proxy: /api → localhost:7000
+│   ├── vite.config.ts                # Proxy: /api -> localhost:7010
 │   ├── package.json
 │   ├── Dockerfile
 │   └── .env                          # ⚠️ Must have VITE_API_URL= (empty)
@@ -550,7 +553,7 @@ AI_TESTCASE_GENERATOR/
 
 ## Support
 
-- API docs: http://localhost:7000/docs (when backend is running)
+- API docs: http://localhost:7010/docs (when backend is running)
 - Architecture docs: `architecture/` folder
 - Connection tests: `tools/` folder
 

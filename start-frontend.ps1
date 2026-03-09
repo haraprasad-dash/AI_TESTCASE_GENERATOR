@@ -1,3 +1,3 @@
 # Start Frontend Script
-cd $PSScriptRoot\frontend
+Set-Location "$PSScriptRoot\frontend"
 npm run dev

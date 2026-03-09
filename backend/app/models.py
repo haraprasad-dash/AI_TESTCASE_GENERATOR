@@ -68,10 +68,13 @@ class AppConfig(BaseModel):
 # ============================================
 
 class FileInput(BaseModel):
+    file_id: Optional[str] = None
     filename: str
-    path: str
+    path: Optional[str] = None
+    size_bytes: Optional[int] = None
     extracted_text: Optional[str] = None
     content_type: Optional[str] = None
+    page_count: Optional[int] = None
 
 
 class GenerationInputs(BaseModel):
@@ -116,6 +119,8 @@ class GenerationMetadata(BaseModel):
     temperature: float
     total_tokens: Optional[int] = None
     sources: List[str] = []
+    clarification_required: bool = False
+    clarification_questions: List[str] = []
 
 
 class GenerationResponse(BaseModel):

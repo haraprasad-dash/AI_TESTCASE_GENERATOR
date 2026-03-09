@@ -74,6 +74,8 @@ export interface GenerationMetadata {
   temperature: number;
   total_tokens?: number;
   sources: string[];
+  clarification_required?: boolean;
+  clarification_questions?: string[];
 }
 
 export interface GenerationResponse {

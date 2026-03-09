@@ -1,13 +1,15 @@
 """
 Main generation endpoints.
 """
+import uuid
 from datetime import datetime
 from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from app.models import (
-    GenerationInputs, GenerationConfiguration, GenerationRequest, GenerationResponse
+    GenerationInputs, GenerationConfiguration, GenerationRequest, GenerationResponse,
+    GenerationOutputs, GenerationMetadata
 )
 from app.services.generation_service import GenerationService
 
@@ -31,6 +33,18 @@ class ConnectionManager:
             await self.active_connections[request_id].send_json(message)
 
 manager = ConnectionManager()
+
+
+def _friendly_error_message(error: str, provider: str, model: str) -> str:
+    if not error:
+        return error
+    lower = error.lower()
+    if provider == "groq" and ("rate limit" in lower or "rate_limit_exceeded" in lower or "error code: 429" in lower):
+        return (
+            f"Groq token/day limit reached for model '{model}'. "
+            "Please switch to another Groq model, use Ollama local provider, or retry after quota reset."
+        )
+    return error
 
 
 @router.post("")
@@ -70,12 +84,37 @@ async def generate(request: Dict[str, Any]) -> GenerationResponse:
             configuration=config
         )
         
-        return await service.generate(inputs, config)
-        
-    except HTTPException:
-        raise
+        result = await service.generate(inputs, config)
+        if result.status == "failed" and result.error:
+            result.error = _friendly_error_message(result.error, config.provider, config.model or "unknown")
+        return result
+
+    except HTTPException as e:
+        return GenerationResponse(
+            request_id=str(uuid.uuid4()),
+            status="failed",
+            timestamp=datetime.utcnow(),
+            outputs=GenerationOutputs(),
+            metadata=GenerationMetadata(
+                model_used=request.get("configuration", {}).get("model", "unknown"),
+                temperature=request.get("configuration", {}).get("temperature", 0.2),
+                sources=[]
+            ),
+            error=str(e.detail)
+        )
     except Exception as e:
-        raise HTTPException(500, f"Generation failed: {str(e)}")
+        return GenerationResponse(
+            request_id=str(uuid.uuid4()),
+            status="failed",
+            timestamp=datetime.utcnow(),
+            outputs=GenerationOutputs(),
+            metadata=GenerationMetadata(
+                model_used=request.get("configuration", {}).get("model", "unknown"),
+                temperature=request.get("configuration", {}).get("temperature", 0.2),
+                sources=[]
+            ),
+            error=f"Generation failed: {str(e)}"
+        )
 
 
 @router.websocket("/ws/{request_id}")

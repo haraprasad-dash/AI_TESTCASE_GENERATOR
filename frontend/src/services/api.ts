@@ -29,20 +29,20 @@ class ApiService {
 
   // JIRA
   async testJiraConnection() {
-    return this.client.post('/api/jira/test-connection');
+    return this.client.post('/api/jira/test-connection', null, { timeout: 15000 });
   }
 
   async getJiraIssue(issueKey: string) {
-    return this.client.get(`/api/jira/issue/${issueKey}`);
+    return this.client.get(`/api/jira/issue/${issueKey}`, { timeout: 20000 });
   }
 
   // ValueEdge
   async testValueEdgeConnection() {
-    return this.client.post('/api/valueedge/test-connection');
+    return this.client.post('/api/valueedge/test-connection', null, { timeout: 15000 });
   }
 
   async getValueEdgeItem(itemId: string) {
-    return this.client.get(`/api/valueedge/item/${itemId}`);
+    return this.client.get(`/api/valueedge/item/${itemId}`, { timeout: 20000 });
   }
 
   // Documents
@@ -59,22 +59,43 @@ class ApiService {
   }
 
   // LLM
-  async testLLMConnection(provider: 'groq' | 'ollama') {
+  async testLLMConnection(provider: 'groq' | 'ollama', groqApiKey?: string) {
     return this.client.post('/api/llm/test-connection', null, {
       params: { provider },
+      timeout: 15000,
+      headers: groqApiKey ? { 'x-groq-api-key': groqApiKey } : undefined,
     });
   }
 
-  async listModels(provider: 'groq' | 'ollama') {
-    return this.client.get<string[]>('/api/llm/models', { params: { provider } });
+  async listModels(provider: 'groq' | 'ollama', groqApiKey?: string) {
+    return this.client.get<string[]>('/api/llm/models', {
+      params: { provider },
+      timeout: 8000,
+      headers: groqApiKey ? { 'x-groq-api-key': groqApiKey } : undefined,
+    });
+  }
+
+  async enhancePrompt(prompt: string, provider: 'groq' | 'ollama', model: string) {
+    return this.client.post<{ enhanced_prompt: string }>('/api/llm/enhance-prompt', {
+      prompt,
+      provider,
+      model,
+    });
   }
 
   // Generation
   async generate(inputs: GenerationInputs, configuration: GenerationConfiguration) {
-    return this.client.post<GenerationResponse>('/api/generate', {
-      inputs,
-      configuration,
-    });
+    const timeoutMs = configuration.provider === 'ollama' ? 600000 : 180000;
+    return this.client.post<GenerationResponse>(
+      '/api/generate',
+      {
+        inputs,
+        configuration,
+      },
+      {
+        timeout: timeoutMs,
+      }
+    );
   }
 
   createWebSocket(requestId: string): WebSocket {

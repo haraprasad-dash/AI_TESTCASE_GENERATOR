@@ -39,7 +39,10 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       toast.success('JIRA connection successful!');
     } catch (error: any) {
       setTestStatus(prev => ({ ...prev, jira: 'error' }));
-      toast.error('JIRA connection failed');
+      const message = error?.code === 'ECONNABORTED'
+        ? 'JIRA connection timed out. Check URL/network/credentials and retry.'
+        : 'JIRA connection failed';
+      toast.error(message);
     } finally {
       setTesting(prev => ({ ...prev, jira: false }));
     }
@@ -54,7 +57,10 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       toast.success('ValueEdge connection successful!');
     } catch (error: any) {
       setTestStatus(prev => ({ ...prev, valueedge: 'error' }));
-      toast.error('ValueEdge connection failed');
+      const message = error?.code === 'ECONNABORTED'
+        ? 'ValueEdge connection timed out. Check URL/network/credentials and retry.'
+        : 'ValueEdge connection failed';
+      toast.error(message);
     } finally {
       setTesting(prev => ({ ...prev, valueedge: false }));
     }

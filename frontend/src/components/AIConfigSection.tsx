@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useSettingsStore } from '../store/settingsStore';
 
 interface Props {
   provider: 'groq' | 'ollama';
@@ -23,40 +24,81 @@ export const AIConfigSection: React.FC<Props> = ({
   temperature,
   setTemperature,
 }) => {
+  const GROQ_FALLBACK_MODELS = [
+    'openai/gpt-oss-120b',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-70b-versatile',
+    'mixtral-8x7b-32768',
+  ];
+
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const groqApiKey = useSettingsStore((s) => s.llm.groq.apiKey);
 
   useEffect(() => {
     loadModels();
   }, [provider]);
 
+  const normalizeModelPayload = (payload: any): string[] => {
+    if (Array.isArray(payload)) {
+      return payload.filter((m) => typeof m === 'string' && m.trim().length > 0);
+    }
+
+    // Backward/forward compatibility if API returns wrapped payload.
+    if (payload && Array.isArray(payload.models)) {
+      return payload.models.filter((m: any) => typeof m === 'string' && m.trim().length > 0);
+    }
+
+    return [];
+  };
+
+  const applyModels = (models: string[]) => {
+    setAvailableModels(models);
+    if (!models.includes(model)) {
+      const defaultModel =
+        models.find((m: string) =>
+          m.includes('llama-3.3-70b-versatile') ||
+          m.includes('openai/gpt-oss-120b') ||
+          m.includes('llama-3.1-70b') ||
+          m.includes('mixtral')
+        ) || models[0];
+      setModel(defaultModel);
+    }
+  };
+
   const loadModels = async () => {
     setIsLoading(true);
     setLoadError(null);
+
     try {
-      const response = await api.listModels(provider);
-      const models = response.data;
+      const response = await api.listModels(provider, provider === 'groq' ? groqApiKey : undefined);
+      const models = normalizeModelPayload(response.data);
       
       if (models && models.length > 0) {
-        setAvailableModels(models);
-        // Set default model if current not in list
-        if (!models.includes(model)) {
-          // Select first model or a preferred default
-          const defaultModel = models.find((m: string) => 
-            m.includes('llama-3.3-70b-versatile') || 
-            m.includes('llama-3.1-70b') ||
-            m.includes('mixtral')
-          ) || models[0];
-          setModel(defaultModel);
-        }
+        applyModels(models);
       } else {
+        if (provider === 'groq') {
+          applyModels(GROQ_FALLBACK_MODELS);
+          setLoadError('Live Groq model list returned empty. Showing fallback models.');
+          return;
+        }
         setLoadError('No models available');
         setAvailableModels([]);
       }
     } catch (error: any) {
       console.error('Failed to load models:', error);
+      if (provider === 'groq') {
+        applyModels(GROQ_FALLBACK_MODELS);
+        const detail = error?.response?.data?.detail;
+        if (detail && String(detail).toLowerCase().includes('api key')) {
+          setLoadError('Groq API key missing. Add key in Settings to fetch live available models.');
+        } else {
+          setLoadError('Could not fetch live Groq models. Showing fallback models.');
+        }
+        return;
+      }
       // Check if it's a network error (backend not running)
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || !error.response) {
         setLoadError('Cannot connect to backend. Please ensure the backend server is running on http://localhost:7000');
@@ -72,7 +114,7 @@ export const AIConfigSection: React.FC<Props> = ({
   const testConnection = async () => {
     setConnectionStatus('testing');
     try {
-      await api.testLLMConnection(provider);
+      await api.testLLMConnection(provider, provider === 'groq' ? groqApiKey : undefined);
       setConnectionStatus('connected');
       toast.success(`Connected to ${provider}!`);
       // Reload models on successful connection
@@ -80,7 +122,10 @@ export const AIConfigSection: React.FC<Props> = ({
       setTimeout(() => setConnectionStatus('idle'), 3000);
     } catch (error: any) {
       setConnectionStatus('error');
-      toast.error(`Connection failed`);
+      const message = error?.code === 'ECONNABORTED'
+        ? `Connection timed out for ${provider}.`
+        : 'Connection failed';
+      toast.error(message);
       setTimeout(() => setConnectionStatus('idle'), 3000);
     }
   };

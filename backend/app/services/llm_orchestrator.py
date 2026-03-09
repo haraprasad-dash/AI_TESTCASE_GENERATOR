@@ -2,6 +2,7 @@
 LLM Orchestrator - Unified interface for Groq and Ollama providers.
 """
 import os
+import asyncio
 import httpx
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, Optional, List, Dict, Any
@@ -69,51 +70,18 @@ class LLMProvider(ABC):
 class GroqProvider(LLMProvider):
     """Groq cloud provider implementation."""
     
-    # Comprehensive list of Groq models as of 2026
+    # Minimal fallback only when live API lookup is unavailable.
     GROQ_MODELS = [
-        # OpenAI Models
         "openai/gpt-oss-120b",
-        
-        # Llama 3.3 Models
         "llama-3.3-70b-versatile",
-        "llama-3.3-70b-specdec",
-        
-        # Llama 3.1 Models
-        "llama-3.1-8b-instant",
         "llama-3.1-70b-versatile",
-        "llama-3.1-405b-reasoning",
-        
-        # Llama 3.2 Models (Text only)
-        "llama-3.2-1b-preview",
-        "llama-3.2-3b-preview",
-        
-        # Llama 3.2 Vision Models
-        "llama-3.2-11b-vision-preview",
-        "llama-3.2-90b-vision-preview",
-        
-        # Llama Guard
-        "llama-guard-3-8b",
-        
-        # Mixtral Models
-        "mixtral-8x7b-32768",
-        "mixtral-8x22b-instruct",
-        
-        # Gemma Models
-        "gemma-7b-it",
-        "gemma2-9b-it",
-        
-        # Qwen Models
-        "qwen-2.5-32b-instruct",
-        "qwen-2.5-coder-32b-instruct",
-        
-        # DeepSeek Models
+    ]
+
+    # Known retired/decommissioned Groq model ids that should never be shown.
+    DECOMMISSIONED_MODELS = {
         "deepseek-r1-distill-qwen-32b",
         "deepseek-r1-distill-llama-70b",
-        
-        # Other Models
-        "llama3-8b-8192",
-        "llama3-70b-8192",
-    ]
+    }
     
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -190,12 +158,21 @@ class GroqProvider(LLMProvider):
     async def test_connection(self) -> Dict[str, Any]:
         """Test Groq connection."""
         try:
-            # Try to list models
-            models = self.client.models.list()
+            # Run SDK call in a thread and enforce a hard timeout so UI never hangs.
+            models = await asyncio.wait_for(
+                asyncio.to_thread(self.client.models.list),
+                timeout=10.0,
+            )
             return {
                 "status": "connected",
                 "provider": "groq",
                 "available_models": len(models.data)
+            }
+        except asyncio.TimeoutError:
+            return {
+                "status": "error",
+                "provider": "groq",
+                "error": "Groq connection timed out. Check network/firewall and try again."
             }
         except Exception as e:
             return {
@@ -207,15 +184,20 @@ class GroqProvider(LLMProvider):
     async def list_models(self) -> List[str]:
         """List available Groq models."""
         try:
-            # Try to fetch from API first for most up-to-date list
-            models = self.client.models.list()
-            api_models = [m.id for m in models.data]
-            
-            # Combine with our static list to ensure we have all models
-            combined = list(dict.fromkeys(api_models + self.GROQ_MODELS))
-            return combined
+            models = await asyncio.wait_for(
+                asyncio.to_thread(self.client.models.list),
+                timeout=10.0,
+            )
+            api_models = sorted(
+                {
+                    m.id.strip()
+                    for m in models.data
+                    if getattr(m, "id", None) and isinstance(m.id, str) and m.id.strip()
+                }
+            )
+            filtered = [m for m in api_models if m not in self.DECOMMISSIONED_MODELS]
+            return filtered or self.GROQ_MODELS
         except Exception:
-            # Fallback to static list if API call fails
             return self.GROQ_MODELS
 
 

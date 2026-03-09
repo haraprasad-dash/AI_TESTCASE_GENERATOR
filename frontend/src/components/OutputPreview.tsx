@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { 
   FileText, Copy, Download, Check, FileCode, 
   Table, ScrollText, Braces, TestTube, 
-  Sparkles, Cpu, BarChart3, Loader2, RefreshCw
+  Sparkles, Cpu, BarChart3, Loader2, RefreshCw, Paperclip
 } from 'lucide-react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
@@ -14,6 +14,9 @@ interface Props {
   output: GenerationResponse;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onSubmitClarification?: (answers: string) => void;
+  onUploadClarificationFiles?: (files: File[]) => Promise<void> | void;
+  clarificationHistory?: Array<{ questions: string[]; answer: string }>;
 }
 
 const exportFormats = [
@@ -24,10 +27,41 @@ const exportFormats = [
   { key: 'gherkin', label: 'Gherkin', icon: ScrollText, color: 'bg-amber-100 text-amber-700' },
 ] as const;
 
-export const OutputPreview: React.FC<Props> = ({ output, onRefresh, isRefreshing }) => {
+export const OutputPreview: React.FC<Props> = ({
+  output,
+  onRefresh,
+  isRefreshing,
+  onSubmitClarification,
+  onUploadClarificationFiles,
+  clarificationHistory = [],
+}) => {
   const [activeTab, setActiveTab] = useState<'plan' | 'cases' | 'both'>('both');
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [clarificationAnswers, setClarificationAnswers] = useState('');
+  const [isUploadingClarificationFiles, setIsUploadingClarificationFiles] = useState(false);
+
+  const clarificationRequired = Boolean(output.metadata.clarification_required);
+  const clarificationQuestions = output.metadata.clarification_questions || [];
+
+  const handleClarificationSubmit = () => {
+    if (!onSubmitClarification || !clarificationAnswers.trim()) return;
+    onSubmitClarification(clarificationAnswers);
+    setClarificationAnswers('');
+  };
+
+  const handleClarificationFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !onUploadClarificationFiles) return;
+
+    setIsUploadingClarificationFiles(true);
+    try {
+      await onUploadClarificationFiles(files);
+    } finally {
+      setIsUploadingClarificationFiles(false);
+      e.target.value = '';
+    }
+  };
 
   const handleCopy = async (content: string) => {
     try {
@@ -100,7 +134,7 @@ export const OutputPreview: React.FC<Props> = ({ output, onRefresh, isRefreshing
           </div>
           {onRefresh && (
             <button
-              onClick={onRefresh}
+              onClick={() => onRefresh()}
               disabled={isRefreshing}
               type="button"
               title="Regenerate"
@@ -157,6 +191,79 @@ export const OutputPreview: React.FC<Props> = ({ output, onRefresh, isRefreshing
         )}
       </div>
 
+      {clarificationRequired && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="text-sm font-bold text-amber-900 mb-2">Clarification Needed Before Test Case Generation</h3>
+          <p className="text-sm text-amber-800 mb-3">
+            AI needs additional details. Provide answers below, then regenerate.
+          </p>
+          {clarificationQuestions.length > 0 && (
+            <ul className="list-disc pl-5 text-sm text-amber-900 space-y-1 mb-3">
+              {clarificationQuestions.map((q, idx) => (
+                <li key={`${idx}-${q.slice(0, 20)}`}>{q}</li>
+              ))}
+            </ul>
+          )}
+          {clarificationHistory.length > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-white p-3">
+              <p className="text-xs font-semibold text-amber-900 mb-2">Conversation History</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {clarificationHistory.map((entry, idx) => (
+                  <div key={`hist-${idx}`} className="text-xs text-slate-700">
+                    <p className="font-semibold text-slate-800">Round {idx + 1}</p>
+                    {entry.questions.length > 0 && (
+                      <ul className="list-disc pl-4 mb-1">
+                        {entry.questions.map((q, qIdx) => (
+                          <li key={`q-${idx}-${qIdx}`}>{q}</li>
+                        ))}
+                      </ul>
+                    )}
+                    <p><span className="font-medium">Answer:</span> {entry.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <textarea
+            value={clarificationAnswers}
+            onChange={(e) => setClarificationAnswers(e.target.value)}
+            placeholder="Provide answers for the above questions..."
+            rows={5}
+            className="input-field resize-none bg-white"
+          />
+          <div className="mt-3">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-amber-900 cursor-pointer">
+              <Paperclip className="w-4 h-4" />
+              Attach snapshots/documents for clarification
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.docx,.png,.jpg,.jpeg"
+                onChange={handleClarificationFilesChange}
+                className="hidden"
+                disabled={isUploadingClarificationFiles || isRefreshing}
+              />
+            </label>
+            <p className="text-xs text-amber-700 mt-1">Supported: PDF, DOCX, PNG, JPG, JPEG</p>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleClarificationSubmit}
+              disabled={
+                isRefreshing ||
+                isUploadingClarificationFiles ||
+                !clarificationAnswers.trim() ||
+                !onSubmitClarification
+              }
+              className="btn-primary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUploadingClarificationFiles ? 'Uploading...' : 'Submit Feedback & Regenerate'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
         {/* Toolbar */}
@@ -202,7 +309,7 @@ export const OutputPreview: React.FC<Props> = ({ output, onRefresh, isRefreshing
               </ReactMarkdown>
             </div>
           )}
-          {(activeTab === 'both' || activeTab === 'cases') && casesContent && (
+          {(activeTab === 'both' || activeTab === 'cases') && !clarificationRequired && casesContent && (
             <div>
               {activeTab === 'both' && (
                 <div className="flex items-center gap-2 mb-4">

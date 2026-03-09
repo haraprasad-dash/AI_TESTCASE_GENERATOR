@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { 
   Sparkles, Lightbulb, Wand2, Shield, 
-  Bug, Zap, FileCheck, ChevronDown, ChevronUp
+  Bug, Zap, FileCheck, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
+import { api } from '../services/api';
+import toast from 'react-hot-toast';
 
 interface Props {
   value: string;
   onChange: (value: string) => void;
+  provider?: 'groq' | 'ollama';
+  model?: string;
 }
 
 const promptSuggestions = [
@@ -16,9 +20,27 @@ const promptSuggestions = [
   { icon: FileCheck, label: 'API Coverage', text: 'Ensure all API endpoints are covered with valid and invalid request scenarios.' },
 ];
 
-export const PromptSection: React.FC<Props> = ({ value, onChange }) => {
+export const PromptSection: React.FC<Props> = ({ value, onChange, provider = 'groq', model = 'llama-3.3-70b-versatile' }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+
+  const handleEnhance = async () => {
+    if (!value.trim()) {
+      toast.error('Type a prompt first before enhancing');
+      return;
+    }
+    setIsEnhancing(true);
+    try {
+      const res = await api.enhancePrompt(value, provider, model);
+      onChange(res.data.enhanced_prompt);
+      toast.success('Prompt enhanced!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to enhance prompt');
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
 
   const handleSuggestionClick = (index: number, text: string) => {
     setSelectedSuggestion(index);
@@ -107,11 +129,22 @@ Example: Focus on security testing and negative test cases for the authenticatio
           <span className="text-xs text-slate-400">
             Leave empty to use default templates
           </span>
-          <span className={`text-xs font-medium ${
-            value.length > 500 ? 'text-amber-500' : 'text-slate-400'
-          }`}>
-            {value.length} chars
-          </span>
+          <div className="flex items-center gap-3">
+            <span className={`text-xs font-medium ${
+              value.length > 500 ? 'text-amber-500' : 'text-slate-400'
+            }`}>
+              {value.length} chars
+            </span>
+            <button
+              type="button"
+              onClick={handleEnhance}
+              disabled={isEnhancing || !value.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+            >
+              <RefreshCw className={`w-3 h-3 ${isEnhancing ? 'animate-spin' : ''}`} />
+              {isEnhancing ? 'Enhancing...' : '✨ Enhance'}
+            </button>
+          </div>
         </div>
       </div>
 
