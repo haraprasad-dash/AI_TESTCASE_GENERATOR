@@ -19,11 +19,13 @@
 4. [Installation](#installation)
 5. [Configuration](#configuration)
 6. [How to Use](#how-to-use)
-7. [Input Sources](#input-sources)
-8. [AI Configuration](#ai-configuration)
-9. [Export Options](#export-options)
-10. [Troubleshooting](#troubleshooting)
-11. [Best Practices](#best-practices)
+7. [Review Workflows](#review-workflows)
+8. [Input Sources](#input-sources)
+9. [AI Configuration](#ai-configuration)
+10. [Export Options](#export-options)
+11. [Regression Suite](#regression-suite)
+12. [Troubleshooting](#troubleshooting)
+13. [Best Practices](#best-practices)
 
 ---
 
@@ -81,6 +83,8 @@ Open **http://localhost:3000** in your browser.
 | Fetch & Validate | Fetch button validates ticket/item IDs before generation |
 | AI-Powered Generation | LLM-driven extraction and structuring of test scenarios |
 | Clarification Workflow | UI asks follow-up questions when clarification is required before final case output |
+| Review Workflows | Dedicated Test Case Review and User Guide Review modes with intelligent clarification |
+| Review Prompt Enhancement | `✨ Enhance` button improves Review Custom Instructions using selected provider/model |
 | Refresh Output | Re-generate without re-entering inputs using the Refresh button |
 | Multiple Export Formats | Markdown, PDF, Excel (styled), JSON, Gherkin (.feature) |
 | BDD-Ready Gherkin | Properly formatted Given/When/Then scenarios from table data |
@@ -291,7 +295,7 @@ Choose one or more sources:
 
 - **JIRA ID** — Enter ticket key (e.g. `PROJ-123`), click **Fetch** to validate
 - **ValueEdge ID** — Enter numeric item ID, click **Fetch** to validate
-- **Upload Documents** — Drag & drop PDF, DOCX, PNG, or JPG files (max 20MB each)
+- **Attach Requirement Details** — Drag & drop PDF, DOCX, XLSX, TXT, FEATURE, MD, PNG, or JPG files (max 20MB each)
 - **Combine** — Use multiple sources for richer context
 
 #### 2. Configure AI
@@ -337,6 +341,43 @@ Click **Refresh** to regenerate with the same inputs.
 
 ---
 
+## Review Workflows
+
+Use these when you need quality/completeness assessment of existing artifacts, not fresh generation.
+
+### Available Actions
+
+- **Review Test Cases** — analyzes coverage, quality, gaps, and duplicates
+- **Review User Guide** — verifies documentation accuracy/completeness against requirements/test artifacts
+- **Run Both Reviews** — executes both analyses in one request
+- **Enhance Review Instructions** — rewrites the optional review custom instructions for stronger clarity and coverage before running review
+
+### Review Custom Instructions Enhancer
+
+- Located under **Review Custom Instructions (optional)** in the Review section
+- Uses the same AI configuration selected in UI (provider + model)
+- Calls `POST /api/llm/enhance-prompt` and replaces the textarea content with the enhanced version
+- Disabled when instructions are empty; shows loading state while enhancement is in progress
+
+### Review Clarification UX
+
+- Partial results are shown while clarification is pending
+- Clarification templates are available for quick responses
+- Clarification history is preserved and editable across rounds
+- Additional files can be attached during clarification
+- Max clarification rounds: 3 (then best-effort assumptions are applied)
+
+### Review Endpoints
+
+- `POST /api/review/test-cases`
+- `POST /api/review/user-guide`
+- `POST /api/review/both`
+- `GET /api/review/{review_id}/status`
+- `POST /api/review/clarification/{review_id}/attach`
+- `POST /api/review/{review_id}/export`
+
+---
+
 ## Input Sources
 
 ### JIRA
@@ -357,6 +398,8 @@ Click **Refresh** to regenerate with the same inputs.
 |--------|-----------|-----------|
 | PDF | .pdf | Direct text extraction; OCR fallback for scanned |
 | Word | .docx | Text and table extraction |
+| Excel | .xlsx/.xls | Sheet flattening for review/test artifact analysis |
+| Text/Markdown/Feature | .txt/.md/.feature | Direct text extraction |
 | PNG | .png | Tesseract OCR |
 | JPG/JPEG | .jpg | Tesseract OCR |
 
@@ -422,6 +465,37 @@ ollama pull llama3.1        # 8B — better quality
 
 ---
 
+## Regression Suite
+
+Run this suite after any code change to prevent regressions in settings, LLM connection flow, and generation input validation.
+
+### Automated Regression Command
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m pytest -q tests/test_regression_api.py tests/test_regression_units.py
+```
+
+### What It Covers
+
+- Empty vs valid generation input gating (including custom-instructions-only flow)
+- Friendly error mapping for Groq rate-limit failures
+- Secret normalization (`Bearer` prefix handling, masked placeholder preservation)
+- LLM test-connection and model-list key handling
+- Settings API secret masking and default-provider behavior
+- Review API validation, clarification rounds, and status behavior
+- Review smart-default clarification prompts and timeout fallback
+
+### Release Gate Recommendation
+
+Before merge/deploy:
+
+1. Run the automated regression command above.
+2. Execute manual smoke checks in `REGRESSION_TESTCASES.md`.
+3. Fix any failing case and rerun until all pass.
+
+---
+
 ## Troubleshooting
 
 ### "Cannot connect to backend"
@@ -454,7 +528,7 @@ The backend `generation_service.py` reads the key from settings — this require
 ### "File upload failed"
 
 - Max 20MB per file
-- Supported formats: PDF, DOCX, PNG, JPG
+- Supported formats: PDF, DOCX, XLSX, XLS, TXT, MD, FEATURE, PNG, JPG
 - For OCR (images / scanned PDFs): Tesseract must be installed
 
 ### "No content extracted from file"

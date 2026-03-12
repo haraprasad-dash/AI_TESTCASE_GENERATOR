@@ -156,6 +156,21 @@ Before creating any Python scripts in `tools/`:
 - **Handshake Testing**: Build minimal scripts to verify external services respond correctly
 - **Self-Healing**: When errors occur, follow the Repair Loop and update documentation
 
+### Regression Gate (Mandatory After Code Changes)
+
+After any code update that touches API routing, settings, generation logic, or provider connectivity:
+
+1. Run automated regression suite:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m pytest -q tests/test_regression_api.py tests/test_regression_units.py
+```
+
+2. Run manual smoke checks listed in `REGRESSION_TESTCASES.md`.
+3. If any regression fails, fix the issue first, then rerun the full suite.
+4. Record test result summary in `progress.md`.
+
 ---
 
 ## Security Considerations
@@ -203,3 +218,53 @@ Before creating any Python scripts in `tools/`:
 - The `BLAST.md` file is the master system prompt
 - Projects built using this framework will create the actual code, configuration, and deployment artifacts
 - Always refer to `gemini.md` as the single source of truth for project state
+
+---
+
+## Repository Addendum (TestGen AI)
+
+This workspace now includes production-facing implementation artifacts in addition to framework docs.
+
+### Review Workflow Components
+
+- Backend router: `backend/app/routers/review.py`
+- Backend service: `backend/app/services/review_service.py`
+- Frontend review UI: `frontend/src/components/ReviewSection.tsx`, `frontend/src/components/ReviewOutput.tsx`
+- Frontend page integration: `frontend/src/pages/HomePage.tsx`
+
+### Clarification Behavior (Implemented)
+
+- Multi-round clarification with history tracking
+- Smart default questions (BDD strictness, Excel Test ID column, URL freshness, multi-source version alignment)
+- Clarification attachment uploads
+- Timeout fallback on status polling (best-effort assumptions after 30 minutes)
+
+### Review Prompt Enhancement (Implemented)
+
+- Review UI now includes `✨ Enhance` for **Review Custom Instructions** in `frontend/src/components/ReviewSection.tsx`
+- Enhancement uses current UI AI settings (provider/model from `frontend/src/pages/HomePage.tsx`)
+- Backend endpoint used: `POST /api/llm/enhance-prompt`
+
+### Documentation Sync Rule
+
+When review workflow logic changes, update all of the following together:
+
+1. `README.md` (Review Workflows + API behavior)
+2. `REGRESSION_TESTCASES.md` (test IDs / expectations)
+3. `progress.md` (execution + verification summary)
+
+### Verification Gate
+
+After modifying review/generation/settings behavior, run:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m pytest -q tests/test_regression_api.py tests/test_regression_units.py
+```
+
+And confirm frontend build:
+
+```powershell
+cd frontend
+npm run build
+```
