@@ -86,7 +86,7 @@ Open **http://localhost:3000** in your browser.
 | BDD-First Test Cases | Default test-case output is Gherkin-style BDD unless explicitly opted out |
 | Clarification Workflow | UI asks follow-up questions when clarification is required before final case output |
 | Review Workflows | Dedicated Test Case Review and User Guide Review modes with intelligent clarification |
-| Review Prompt Enhancement | `✨ Enhance` button improves Review Custom Instructions using selected provider/model |
+| Context-Aware Prompt Enhancement | `✨ Enhance` uses selected section context (IDs/files/toggles/review mode) to produce practical prompts |
 | Refresh Output | Re-generate without re-entering inputs using the Refresh button |
 | Multiple Export Formats | Markdown, PDF, Excel (styled), JSON, Gherkin (.feature) |
 | BDD-Ready Gherkin | Properly formatted Given/When/Then scenarios from table data |
@@ -360,6 +360,20 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 - Uses the same AI configuration selected in UI (provider + model)
 - Calls `POST /api/llm/enhance-prompt` and replaces the textarea content with the enhanced version
 - Disabled when instructions are empty; shows loading state while enhancement is in progress
+
+### Context-Aware Enhance (Plan / Case / Review)
+
+- Enhance is section-aware and context-aware:
+   - **Test Plan Prompt Enhance** uses generation context (`jira_ids`, `valueedge_ids`, uploaded file snippets, template toggle state)
+   - **Test Case Prompt Enhance** uses the same generation context but applies testcase-focused enhancement rules
+   - **Review Enhance** auto-selects subtype (`review_test_cases`, `review_user_guide`, or mixed review) and uses review context (modes, guide URL, files, source IDs)
+- Backend applies quality guards:
+   - preserves explicit user constraints (e.g., high-priority-only scope)
+   - prevents section drift (e.g., testcase checklist returned for test-plan enhancement)
+   - applies deterministic fallback rewrite when model output is misaligned
+- API contract:
+   - endpoint: `POST /api/llm/enhance-prompt`
+   - request fields: `prompt`, `provider`, `model`, `prompt_type`, `context`
 
 ### Review Clarification UX
 

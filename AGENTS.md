@@ -262,6 +262,22 @@ This workspace now includes production-facing implementation artifacts in additi
 - Enhancement uses current UI AI settings (provider/model from `frontend/src/pages/HomePage.tsx`)
 - Backend endpoint used: `POST /api/llm/enhance-prompt`
 
+### Context-Aware Prompt Enhancement (Implemented)
+
+- Enhance now supports section/subtype targeting:
+   - `test_plan`
+   - `test_case`
+   - `review_test_cases`
+   - `review_user_guide`
+   - `review` (mixed fallback)
+- Frontend passes context snapshots for enhancement quality:
+   - generation: selected Jira/ValueEdge IDs, uploaded file snippets, template toggles
+   - review: mode flags, guide URL, uploaded file snippets, source IDs
+- Backend uses context digest + quality guards:
+   - explicit constraint retention (e.g., high-priority-only requests)
+   - section-alignment checks to prevent drift
+   - deterministic fallback rewrite if model output is misaligned
+
 ### Documentation Sync Rule
 
 When review/generation/settings workflow logic changes, update all of the following together:

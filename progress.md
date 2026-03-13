@@ -207,3 +207,12 @@
 | 17:35 | Updated README for multi-ticket + BDD-first + Groq retry behavior | ✅ Complete | Added behavior notes for list-based IDs, BDD default mode, and same-model rate-limit retry strategy |
 | 17:37 | Updated AGENTS repository addendum | ✅ Complete | Synced implemented review/generation behavior and documentation sync rules |
 | 17:39 | Expanded regression testcase catalog | ✅ Complete | Added RG-022 to RG-031 coverage for multi-ticket input, BDD/template precedence, Groq retry, and Jira detail extraction |
+
+## 2026-03-13 - Context-Aware Enhance (Plan/Case/Review)
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 18:05 | Implemented context-aware enhance API contract | ✅ Complete | Added `prompt_type` subtypes + `context` payload for `/api/llm/enhance-prompt` |
+| 18:08 | Wired frontend section context into enhance actions | ✅ Complete | Plan/case/review enhance now sends IDs, file snippets, toggles, review modes, and guide URL |
+| 18:11 | Added quality guards for enhance outputs | ✅ Complete | Constraint retention + section alignment checks + fallback rewrite for misaligned responses |
+| 18:14 | Added regression coverage and ran verification | ✅ Complete | Added RG-032 to RG-035 behavior checks; backend regression `55 passed`; frontend build successful |
