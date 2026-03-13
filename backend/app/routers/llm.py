@@ -4,7 +4,7 @@ LLM provider endpoints.
 import re
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Literal
 from app.services.llm_orchestrator import (
     create_orchestrator, LLMError, ProviderType
 )
@@ -88,6 +88,41 @@ class EnhancePromptRequest(BaseModel):
     prompt: str
     provider: str = "groq"
     model: str = "llama-3.3-70b-versatile"
+    prompt_type: Literal["test_plan", "test_case", "review"] = "test_case"
+
+
+def _build_enhance_system_prompt(prompt_type: Literal["test_plan", "test_case", "review"]) -> str:
+    base_rules = (
+        "You are an expert QA engineer and prompt specialist. "
+        "Rewrite the user's instruction to be clearer and more actionable. "
+        "Rules: (1) State requirements directly — no preamble/filler. "
+        "(2) Preserve explicit user constraints exactly (for example: only high-priority tasks). "
+        "(3) Remove vague wording and keep concise, concrete language. "
+        "(4) Return ONLY the improved prompt text — no explanation."
+    )
+
+    if prompt_type == "test_plan":
+        return (
+            f"{base_rules} "
+            "This enhancement is for TEST PLAN instructions only. "
+            "Focus on plan-level content: scope, objectives, phases, risks, timelines, entry/exit criteria, dependencies, and priorities. "
+            "Do NOT rewrite into testcase/API endpoint checklists unless user explicitly asks for testcase-level output. "
+            "If priority filtering is requested, keep only that priority level in the enhanced instruction."
+        )
+
+    if prompt_type == "review":
+        return (
+            f"{base_rules} "
+            "This enhancement is for REVIEW instructions. "
+            "Focus on coverage gaps, quality checks, traceability, defects, and prioritized review actions."
+        )
+
+    return (
+        f"{base_rules} "
+        "This enhancement is for TEST CASE generation instructions. "
+        "Add precise testcase-focused coverage guidance: positive, negative, edge, boundary, security, performance where relevant. "
+        "Mention concrete testcase dimensions such as endpoints/fields/conditions/error codes when applicable."
+    )
 
 
 @router.post("/enhance-prompt")
@@ -98,18 +133,7 @@ async def enhance_prompt(request: EnhancePromptRequest) -> Dict[str, Any]:
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(400, "Prompt cannot be empty")
 
-    # Strategy from prompt-enhancer-skill.md:
-    # Cut filler, be specific, trust the reader, vary structure, no vague claims.
-    system_prompt = (
-        "You are an expert QA engineer and prompt specialist. "
-        "Rewrite the user's test generation instruction to be clearer and more actionable. "
-        "Rules: (1) State requirements directly — no preamble or filler phrases. "
-        "(2) Add specific test types: positive, negative, edge cases, boundary values, security, performance where relevant. "
-        "(3) Mention concrete coverage areas: endpoints, fields, conditions, error codes. "
-        "(4) Remove vague words like 'comprehensive', 'ensure', 'make sure', 'thorough'. "
-        "(5) Keep the same intent but make every word earn its place. "
-        "Return ONLY the improved prompt — no explanation, no commentary."
-    )
+    system_prompt = _build_enhance_system_prompt(request.prompt_type)
 
     try:
         if request.provider == "groq":

@@ -47,7 +47,7 @@ export const ReviewSection: React.FC<Props> = ({
 
     setIsEnhancingInstructions(true);
     try {
-      const res = await api.enhancePrompt(reviewCustomInstructions, provider, model);
+      const res = await api.enhancePrompt(reviewCustomInstructions, provider, model, 'review');
       setReviewCustomInstructions(res.data.enhanced_prompt);
       toast.success('Review instructions enhanced!');
     } catch (err: any) {

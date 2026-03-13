@@ -86,11 +86,17 @@ class ApiService {
     });
   }
 
-  async enhancePrompt(prompt: string, provider: 'groq' | 'ollama', model: string) {
+  async enhancePrompt(
+    prompt: string,
+    provider: 'groq' | 'ollama',
+    model: string,
+    promptType: 'test_plan' | 'test_case' | 'review' = 'test_case'
+  ) {
     return this.client.post<{ enhanced_prompt: string }>('/api/llm/enhance-prompt', {
       prompt,
       provider,
       model,
+      prompt_type: promptType,
     });
   }
 

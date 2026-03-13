@@ -94,6 +94,21 @@ def test_normalize_groq_key_returns_none_for_empty() -> None:
     assert llm_router._normalize_groq_key("   ") == ""
 
 
+def test_enhance_system_prompt_test_plan_is_not_testcase_biased() -> None:
+    prompt = llm_router._build_enhance_system_prompt("test_plan")
+
+    assert "TEST PLAN" in prompt
+    assert "Do NOT rewrite into testcase/API endpoint checklists" in prompt
+    assert "preserve explicit user constraints" in prompt.lower()
+
+
+def test_enhance_system_prompt_test_case_keeps_testcase_focus() -> None:
+    prompt = llm_router._build_enhance_system_prompt("test_case")
+
+    assert "TEST CASE" in prompt
+    assert "endpoints/fields/conditions/error codes" in prompt
+
+
 @pytest.mark.asyncio
 async def test_get_settings_prefers_ollama_when_no_groq_key(monkeypatch) -> None:
     monkeypatch.setattr(

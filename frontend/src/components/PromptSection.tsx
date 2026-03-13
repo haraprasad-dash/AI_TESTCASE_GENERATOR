@@ -57,7 +57,8 @@ export const PromptSection: React.FC<Props> = ({
     }
 
     try {
-      const res = await api.enhancePrompt(sourceValue, provider, model);
+      const promptType = target === 'plan' ? 'test_plan' : 'test_case';
+      const res = await api.enhancePrompt(sourceValue, provider, model, promptType);
       if (target === 'plan') {
         onTestPlanPromptChange(res.data.enhanced_prompt);
       } else {
