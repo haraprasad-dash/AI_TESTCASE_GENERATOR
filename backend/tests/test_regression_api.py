@@ -294,6 +294,154 @@ def test_enhance_prompt_test_plan_rewrites_user_reported_testcase_style_output(m
     assert "high-priority" in enhanced or "high priority" in enhanced
 
 
+def test_enhance_prompt_test_case_rewrites_plan_style_output(monkeypatch) -> None:
+    plan_style = (
+        "Create a test plan with scope, objectives, milestones, timeline, entry criteria, "
+        "exit criteria, risks, and dependencies."
+    )
+
+    class DummyOrchestrator:
+        async def generate(self, prompt, system_prompt=None):
+            return SimpleNamespace(content=plan_style)
+
+    monkeypatch.setattr(
+        llm_router,
+        "get_settings",
+        lambda: SimpleNamespace(groq_api_key="gsk_test", ollama_base_url="http://localhost:11434"),
+    )
+    monkeypatch.setattr(llm_router, "create_orchestrator", lambda **kwargs: DummyOrchestrator())
+
+    response = client.post(
+        "/api/llm/enhance-prompt",
+        json={
+            "prompt": "Generate API test cases for login and signup",
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "prompt_type": "test_case",
+            "context": {
+                "jira_ids": ["PROJ-201"],
+                "constraints": ["Cover only high-priority scenarios."],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    enhanced = response.json()["enhanced_prompt"].lower()
+    assert "test case" in enhanced or "testcase" in enhanced
+    assert "high-priority" in enhanced or "high priority" in enhanced
+
+
+def test_enhance_prompt_review_test_cases_rewrites_user_guide_style_output(monkeypatch) -> None:
+    user_guide_style = (
+        "Review the user guide for installation steps, onboarding clarity, UI walkthrough, "
+        "and screenshot consistency."
+    )
+
+    class DummyOrchestrator:
+        async def generate(self, prompt, system_prompt=None):
+            return SimpleNamespace(content=user_guide_style)
+
+    monkeypatch.setattr(
+        llm_router,
+        "get_settings",
+        lambda: SimpleNamespace(groq_api_key="gsk_test", ollama_base_url="http://localhost:11434"),
+    )
+    monkeypatch.setattr(llm_router, "create_orchestrator", lambda **kwargs: DummyOrchestrator())
+
+    response = client.post(
+        "/api/llm/enhance-prompt",
+        json={
+            "prompt": "Review uploaded test cases and prioritize critical defects",
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "prompt_type": "review_test_cases",
+            "context": {
+                "review_test_cases": True,
+                "review_user_guide": False,
+                "jira_ids": ["PROJ-301"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    enhanced = response.json()["enhanced_prompt"].lower()
+    assert "test case review" in enhanced or "coverage" in enhanced
+
+
+def test_enhance_prompt_review_user_guide_rewrites_testcase_style_output(monkeypatch) -> None:
+    testcase_style = (
+        "Review test cases for positive tests, negative tests, edge cases, boundary value checks, "
+        "and endpoint coverage completeness."
+    )
+
+    class DummyOrchestrator:
+        async def generate(self, prompt, system_prompt=None):
+            return SimpleNamespace(content=testcase_style)
+
+    monkeypatch.setattr(
+        llm_router,
+        "get_settings",
+        lambda: SimpleNamespace(groq_api_key="gsk_test", ollama_base_url="http://localhost:11434"),
+    )
+    monkeypatch.setattr(llm_router, "create_orchestrator", lambda **kwargs: DummyOrchestrator())
+
+    response = client.post(
+        "/api/llm/enhance-prompt",
+        json={
+            "prompt": "Review user guide quality and correctness",
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "prompt_type": "review_user_guide",
+            "context": {
+                "review_test_cases": False,
+                "review_user_guide": True,
+                "user_guide_url": "https://example.com/guide",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    enhanced = response.json()["enhanced_prompt"].lower()
+    assert "user guide review" in enhanced or "user guide" in enhanced
+
+
+def test_enhance_prompt_review_rewrites_generation_style_output(monkeypatch) -> None:
+    generation_style = (
+        "Create a detailed test plan with scope, timeline, milestones, and exit criteria for release validation."
+    )
+
+    class DummyOrchestrator:
+        async def generate(self, prompt, system_prompt=None):
+            return SimpleNamespace(content=generation_style)
+
+    monkeypatch.setattr(
+        llm_router,
+        "get_settings",
+        lambda: SimpleNamespace(groq_api_key="gsk_test", ollama_base_url="http://localhost:11434"),
+    )
+    monkeypatch.setattr(llm_router, "create_orchestrator", lambda **kwargs: DummyOrchestrator())
+
+    response = client.post(
+        "/api/llm/enhance-prompt",
+        json={
+            "prompt": "Review generated assets and provide prioritized quality findings",
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "prompt_type": "review",
+            "context": {
+                "review_test_cases": True,
+                "review_user_guide": True,
+                "jira_ids": ["PROJ-401"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    enhanced = response.json()["enhanced_prompt"].lower()
+    assert "review" in enhanced
+    assert "test plan" not in enhanced or "enhance review instructions" in enhanced
+
+
 def _review_inputs_with_artifacts() -> dict:
     return {
         "jira_id": "PROJ-101",

@@ -273,6 +273,8 @@ This workspace now includes production-facing implementation artifacts in additi
 - Frontend passes context snapshots for enhancement quality:
    - generation: selected Jira/ValueEdge IDs, uploaded file snippets, template toggles
    - review: mode flags, guide URL, uploaded file snippets, source IDs
+- Scope note:
+   - enhancement context is intentionally compact (first 8 files + trimmed snippets), not full raw document bodies
 - Backend uses context digest + quality guards:
    - explicit constraint retention (e.g., high-priority-only requests)
    - section-alignment checks to prevent drift

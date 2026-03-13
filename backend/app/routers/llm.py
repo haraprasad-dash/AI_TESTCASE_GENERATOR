@@ -231,26 +231,60 @@ def _is_misaligned(
     mentions_user_guide = bool(re.search(r"user guide|documentation|manual", lowered))
     mentions_review = "review" in lowered
 
+    testcase_checklist_patterns = [
+        r"\bpositive tests?\b",
+        r"\bnegative tests?\b",
+        r"\bedge cases?\b",
+        r"\bboundary value\b",
+        r"\berror codes?\b",
+        r"\bsql injection\b",
+        r"\bcross[- ]site scripting\b",
+        r"\bcsrf\b",
+        r"\bendpoint coverage\b",
+        r"\bexpected results?\b",
+        r"\bpreconditions?\b",
+        r"\btest data\b",
+    ]
+
+    testplan_patterns = [
+        r"\bscope\b",
+        r"\bobjectives?\b",
+        r"\btimeline\b",
+        r"\bmilestones?\b",
+        r"\bentry criteria\b",
+        r"\bexit criteria\b",
+        r"\brisk register\b",
+        r"\bdependencies\b",
+        r"\bstakeholders?\b",
+        r"\bphases?\b",
+    ]
+
+    user_guide_patterns = [
+        r"\buser guide\b",
+        r"\bdocumentation\b",
+        r"\bmanual\b",
+        r"\binstallation steps?\b",
+        r"\bonboarding\b",
+        r"\bnavigation\b",
+        r"\bui walkthrough\b",
+        r"\bscreenshots?\b",
+    ]
+
     if prompt_type == "test_plan":
-        testcase_checklist_patterns = [
-            r"\bpositive tests?\b",
-            r"\bnegative tests?\b",
-            r"\bedge cases?\b",
-            r"\bboundary value\b",
-            r"\berror codes?\b",
-            r"\bsql injection\b",
-            r"\bcross[- ]site scripting\b",
-            r"\bcsrf\b",
-            r"\bendpoint coverage\b",
-        ]
         if any(re.search(pattern, lowered) for pattern in testcase_checklist_patterns):
             return True
         return mentions_test_case and not mentions_test_plan
     if prompt_type == "test_case":
+        if any(re.search(pattern, lowered) for pattern in testplan_patterns):
+            return True
         return mentions_test_plan and not mentions_test_case
     if prompt_type == "review_test_cases":
+        if any(re.search(pattern, lowered) for pattern in user_guide_patterns):
+            return True
         return mentions_user_guide and not mentions_test_case
     if prompt_type == "review_user_guide":
+        if any(re.search(pattern, lowered) for pattern in testcase_checklist_patterns):
+            return True
         return mentions_test_case and not mentions_user_guide
     if prompt_type == "review":
         return not mentions_review and (mentions_test_plan or mentions_test_case)

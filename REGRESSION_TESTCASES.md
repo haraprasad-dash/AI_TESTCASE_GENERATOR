@@ -174,6 +174,16 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Endpoint/Function: enhance prompt with `review_test_cases` or `review_user_guide` subtype.
 - Expectation: output aligns to selected review subtype and avoids cross-domain drift.
 
+36. `RG-036` Enhance alignment coverage across all prompt types
+- Endpoint: `POST /api/llm/enhance-prompt`
+- Input: mocked misaligned model outputs for `test_plan`, `test_case`, `review_test_cases`, `review_user_guide`, and `review`.
+- Expectation: fallback/normalization preserves target section intent and avoids cross-type drift.
+
+37. `RG-037` Enhance context is compact snapshot (by design)
+- Endpoint: `POST /api/llm/enhance-prompt`
+- Input: large attachment set and verbose text.
+- Expectation: enhance behavior remains grounded in compact context digest (IDs + limited attachment snippets), not full raw payload bodies.
+
 ## Manual Smoke Checks (recommended)
 
 1. Open UI Settings -> LLM Settings, save valid Groq key, reopen modal.

@@ -86,7 +86,7 @@ Open **http://localhost:3000** in your browser.
 | BDD-First Test Cases | Default test-case output is Gherkin-style BDD unless explicitly opted out |
 | Clarification Workflow | UI asks follow-up questions when clarification is required before final case output |
 | Review Workflows | Dedicated Test Case Review and User Guide Review modes with intelligent clarification |
-| Context-Aware Prompt Enhancement | `✨ Enhance` uses selected section context (IDs/files/toggles/review mode) to produce practical prompts |
+| Context-Aware Prompt Enhancement | `✨ Enhance` uses selected section context (IDs/files/toggles/review mode) via a compact context digest to produce practical prompts |
 | Refresh Output | Re-generate without re-entering inputs using the Refresh button |
 | Multiple Export Formats | Markdown, PDF, Excel (styled), JSON, Gherkin (.feature) |
 | BDD-Ready Gherkin | Properly formatted Given/When/Then scenarios from table data |
@@ -367,6 +367,10 @@ Use these when you need quality/completeness assessment of existing artifacts, n
    - **Test Plan Prompt Enhance** uses generation context (`jira_ids`, `valueedge_ids`, uploaded file snippets, template toggle state)
    - **Test Case Prompt Enhance** uses the same generation context but applies testcase-focused enhancement rules
    - **Review Enhance** auto-selects subtype (`review_test_cases`, `review_user_guide`, or mixed review) and uses review context (modes, guide URL, files, source IDs)
+- Context scope note (important):
+   - enhance uses a **compact context digest**, not full raw payload text
+   - only the first 8 attachments are passed for enhance context
+   - attachment content is snippet-based (trimmed), then compacted again server-side for token safety
 - Backend applies quality guards:
    - preserves explicit user constraints (e.g., high-priority-only scope)
    - prevents section drift (e.g., testcase checklist returned for test-plan enhancement)

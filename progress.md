@@ -216,3 +216,11 @@
 | 18:08 | Wired frontend section context into enhance actions | ✅ Complete | Plan/case/review enhance now sends IDs, file snippets, toggles, review modes, and guide URL |
 | 18:11 | Added quality guards for enhance outputs | ✅ Complete | Constraint retention + section alignment checks + fallback rewrite for misaligned responses |
 | 18:14 | Added regression coverage and ran verification | ✅ Complete | Added RG-032 to RG-035 behavior checks; backend regression `55 passed`; frontend build successful |
+
+## 2026-03-13 - Enhance Context Scope Clarification + Full-Type Verification
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 18:35 | Clarified enhance context scope in docs | ✅ Complete | README/AGENTS now explicitly state compact context digest behavior (first 8 files + trimmed snippets), not full raw document bodies |
+| 18:38 | Expanded enhance regression coverage to all prompt types | ✅ Complete | Added enhance alignment checks for `test_case` and generic `review` in API regression suite |
+| 18:40 | Ran enhance-focused + full backend regressions | ✅ Complete | Enhance-only: `6 passed`; full backend regression: `60 passed` |
