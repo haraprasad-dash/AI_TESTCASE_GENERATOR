@@ -232,6 +232,19 @@ def _is_misaligned(
     mentions_review = "review" in lowered
 
     if prompt_type == "test_plan":
+        testcase_checklist_patterns = [
+            r"\bpositive tests?\b",
+            r"\bnegative tests?\b",
+            r"\bedge cases?\b",
+            r"\bboundary value\b",
+            r"\berror codes?\b",
+            r"\bsql injection\b",
+            r"\bcross[- ]site scripting\b",
+            r"\bcsrf\b",
+            r"\bendpoint coverage\b",
+        ]
+        if any(re.search(pattern, lowered) for pattern in testcase_checklist_patterns):
+            return True
         return mentions_test_case and not mentions_test_plan
     if prompt_type == "test_case":
         return mentions_test_plan and not mentions_test_case
@@ -290,6 +303,14 @@ def _enforce_constraints(enhanced_prompt: str, constraints: List[str]) -> str:
         return output
 
     return output + "\n\nMust-preserve constraints:\n" + "\n".join(f"- {c}" for c in missing)
+
+
+def _normalize_test_plan_output(enhanced_prompt: str) -> str:
+    output = enhanced_prompt.strip()
+    lower = output.lower()
+    if "test plan" in lower:
+        return output
+    return "Create a TEST PLAN only (not testcase checklist).\n\n" + output
 
 
 @router.post("/enhance-prompt")
@@ -356,6 +377,9 @@ async def enhance_prompt(request: EnhancePromptRequest) -> Dict[str, Any]:
                 context_digest,
                 normalized_constraints,
             )
+
+        if request.prompt_type == "test_plan":
+            enhanced_prompt = _normalize_test_plan_output(enhanced_prompt)
 
         return {"enhanced_prompt": enhanced_prompt}
 

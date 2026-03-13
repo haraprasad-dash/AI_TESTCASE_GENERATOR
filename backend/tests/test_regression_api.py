@@ -255,6 +255,45 @@ def test_enhance_prompt_context_aware_prevents_test_plan_drift(monkeypatch) -> N
     assert "high-priority" in enhanced or "high priority" in enhanced
 
 
+def test_enhance_prompt_test_plan_rewrites_user_reported_testcase_style_output(monkeypatch) -> None:
+    testcase_style = (
+        "Generate high-priority tests for endpoint coverage, including positive tests for successful requests, "
+        "negative tests for error handling, edge cases for unexpected inputs, boundary value tests for field limits, "
+        "security tests for authentication and authorization, and performance tests for load and stress conditions."
+    )
+
+    class DummyOrchestrator:
+        async def generate(self, prompt, system_prompt=None):
+            return SimpleNamespace(content=testcase_style)
+
+    monkeypatch.setattr(
+        llm_router,
+        "get_settings",
+        lambda: SimpleNamespace(groq_api_key="gsk_test", ollama_base_url="http://localhost:11434"),
+    )
+    monkeypatch.setattr(llm_router, "create_orchestrator", lambda **kwargs: DummyOrchestrator())
+
+    response = client.post(
+        "/api/llm/enhance-prompt",
+        json={
+            "prompt": "create only high priority task",
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "prompt_type": "test_plan",
+            "context": {
+                "jira_ids": ["PROJ-123"],
+                "valueedge_ids": ["4567"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    enhanced = response.json()["enhanced_prompt"].lower()
+    assert "test plan" in enhanced
+    assert "not testcase checklist" in enhanced or "not generate test case" in enhanced
+    assert "high-priority" in enhanced or "high priority" in enhanced
+
+
 def _review_inputs_with_artifacts() -> dict:
     return {
         "jira_id": "PROJ-101",
