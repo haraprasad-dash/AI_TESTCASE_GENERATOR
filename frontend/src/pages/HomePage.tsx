@@ -8,9 +8,19 @@ import { AIConfigSection } from '../components/AIConfigSection';
 import { PromptSection } from '../components/PromptSection';
 import { OutputPreview } from '../components/OutputPreview';
 import { SettingsModal } from '../components/SettingsModal';
+import { ReviewSection } from '../components/ReviewSection';
+import { ReviewOutput } from '../components/ReviewOutput';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
-import type { FileInput, GenerationInputs, GenerationConfiguration, GenerationResponse } from '../types';
+import type {
+  FileInput,
+  GenerationInputs,
+  GenerationConfiguration,
+  GenerationResponse,
+  ReviewInputs,
+  ReviewConfiguration,
+  ReviewResponse,
+} from '../types';
 
 export const HomePage: React.FC = () => {
   const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
@@ -30,19 +40,38 @@ export const HomePage: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [output, setOutput] = useState<GenerationResponse | null>(null);
+  const [reviewOutput, setReviewOutput] = useState<ReviewResponse | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   
   // Form state
   const [jiraId, setJiraId] = useState('');
+  const [jiraIds, setJiraIds] = useState<string[]>([]);
   const [valueEdgeId, setValueEdgeId] = useState('');
+  const [valueEdgeIds, setValueEdgeIds] = useState<string[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<FileInput[]>([]);
-  const [customPrompt, setCustomPrompt] = useState('');
+  const [testPlanPrompt, setTestPlanPrompt] = useState('');
+  const [testCasePrompt, setTestCasePrompt] = useState('');
+  const [useTestPlanTemplate, setUseTestPlanTemplate] = useState(true);
+  const [useTestCaseTemplate, setUseTestCaseTemplate] = useState(true);
   const [provider, setProvider] = useState<'groq' | 'ollama'>('groq');
   const [model, setModel] = useState('llama-3.3-70b-versatile');
   const [temperature, setTemperature] = useState(0.2);
   const [clarificationConversation, setClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
+  const [reviewClarificationConversation, setReviewClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
+  const [reviewTestCases, setReviewTestCases] = useState(true);
+  const [reviewUserGuide, setReviewUserGuide] = useState(true);
+  const [userGuideUrl, setUserGuideUrl] = useState('');
+  const [reviewCustomInstructions, setReviewCustomInstructions] = useState('');
 
-  const hasGenerationInput = Boolean(jiraId.trim() || valueEdgeId.trim() || uploadedFiles.length > 0);
+  const hasGenerationInput = Boolean(
+    jiraIds.length > 0 ||
+    valueEdgeIds.length > 0 ||
+    jiraId.trim() ||
+    valueEdgeId.trim() ||
+    uploadedFiles.length > 0 ||
+    testPlanPrompt.trim() ||
+    testCasePrompt.trim()
+  );
   // Keep welcome card stable while typing IDs to avoid layout-shift scroll jumps.
   const showWelcomeCard = !output && uploadedFiles.length === 0;
 
@@ -53,6 +82,18 @@ export const HomePage: React.FC = () => {
 
   const handleRemoveFile = (fileId: string) => {
     setUploadedFiles((prev) => prev.filter((f) => f.file_id !== fileId));
+  };
+
+  const handleReviewFilesSelected = async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      try {
+        const response = await api.uploadFile(file);
+        setUploadedFiles((prev) => [...prev, response.data]);
+        toast.success(`Attached for review: ${file.name}`);
+      } catch (error: any) {
+        toast.error(`Failed to attach ${file.name}`);
+      }
+    }
   };
 
   const handleClarificationFileUpload = async (files: File[]) => {
@@ -69,7 +110,7 @@ export const HomePage: React.FC = () => {
 
   const handleGenerate = async (clarificationAnswers?: unknown) => {
     if (!hasGenerationInput) {
-      toast.error('Please provide at least one input source');
+      toast.error('Please provide at least one input source: ticket, document, or custom instructions');
       return;
     }
 
@@ -80,12 +121,16 @@ export const HomePage: React.FC = () => {
       const clarificationText = typeof clarificationAnswers === 'string'
         ? clarificationAnswers.trim()
         : '';
+      const isClarificationFollowUp = clarificationText.length > 0;
 
-      let nextConversation = clarificationConversation;
-      if (clarificationText) {
+      let nextConversation = isClarificationFollowUp ? clarificationConversation : [];
+      if (isClarificationFollowUp) {
         const questions = output?.metadata?.clarification_questions || [];
         nextConversation = [...clarificationConversation, { questions, answer: clarificationText }];
         setClarificationConversation(nextConversation);
+      } else if (clarificationConversation.length > 0) {
+        // New generation request should not inherit prior clarification context.
+        setClarificationConversation([]);
       }
 
       const conversationBlock = nextConversation.length > 0
@@ -100,19 +145,36 @@ export const HomePage: React.FC = () => {
           ].join('\n\n')
         : '';
 
-      const resolvedPrompt = [
-        customPrompt?.trim(),
+      const resolvedPlanPrompt = [
+        testPlanPrompt?.trim(),
         conversationBlock,
         clarificationText
           ? `User Clarification Responses:\n${clarificationText}`
           : ''
       ].filter(Boolean).join('\n\n');
 
+      const resolvedCasePrompt = [
+        testCasePrompt?.trim(),
+        conversationBlock,
+        clarificationText
+          ? `User Clarification Responses:\n${clarificationText}`
+          : ''
+      ].filter(Boolean).join('\n\n');
+
+      // Backward-compatible aggregate prompt for logic paths still reading custom_prompt.
+      const resolvedPrompt = [resolvedPlanPrompt, resolvedCasePrompt].filter(Boolean).join('\n\n');
+
       const inputs: GenerationInputs = {
-        jira_id: jiraId || undefined,
-        valueedge_id: valueEdgeId || undefined,
+        jira_id: jiraIds[0] || jiraId || undefined,
+        jira_ids: jiraIds.length > 0 ? jiraIds : undefined,
+        valueedge_id: valueEdgeIds[0] || valueEdgeId || undefined,
+        valueedge_ids: valueEdgeIds.length > 0 ? valueEdgeIds : undefined,
         files: uploadedFiles,
         custom_prompt: resolvedPrompt || undefined,
+        test_plan_prompt: resolvedPlanPrompt || undefined,
+        test_case_prompt: resolvedCasePrompt || undefined,
+        use_test_plan_template: useTestPlanTemplate,
+        use_test_case_template: useTestCaseTemplate,
       };
 
       const configuration: GenerationConfiguration = {
@@ -175,10 +237,153 @@ export const HomePage: React.FC = () => {
     }
   };
 
+  const isTestCaseArtifact = (filename: string) => /\.(feature|xlsx|xls|txt|md)$/i.test(filename);
+  const isGuideArtifact = (filename: string) => /\.(pdf|docx|txt|md)$/i.test(filename);
+
+  const validateReviewRequest = (reviewMode: 'test-cases' | 'user-guide' | 'both') => {
+    const hasCustomInstructions = Boolean(reviewCustomInstructions.trim());
+    const enableTestCaseReview = reviewMode === 'test-cases' || reviewMode === 'both' ? reviewTestCases : false;
+    const enableUserGuideReview = reviewMode === 'user-guide' || reviewMode === 'both' ? reviewUserGuide : false;
+
+    if (!enableTestCaseReview && !enableUserGuideReview && !hasCustomInstructions) {
+      toast.error('Please enable at least one review type or provide custom instructions');
+      return false;
+    }
+
+    if (enableTestCaseReview) {
+      const hasTestCaseFiles = uploadedFiles.some((file) => isTestCaseArtifact(file.filename));
+      if (!hasTestCaseFiles) {
+        toast.error('Please attach test case files (.feature, .xlsx, .txt)');
+        return false;
+      }
+    }
+
+    if (enableUserGuideReview) {
+      const hasUserGuideFiles = uploadedFiles.some((file) => isGuideArtifact(file.filename));
+      if (!hasUserGuideFiles && !userGuideUrl.trim()) {
+        toast.error('Please upload user guide document or provide URL');
+        return false;
+      }
+    }
+
+    if (userGuideUrl.trim()) {
+      try {
+        const parsed = new URL(userGuideUrl.trim());
+        if (!(parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+          toast.error('Please provide a valid URL');
+          return false;
+        }
+      } catch {
+        toast.error('Please provide a valid URL');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const buildReviewPayload = (): { inputs: ReviewInputs; configuration: ReviewConfiguration } => {
+    return {
+      inputs: {
+        jira_id: jiraIds[0] || jiraId || undefined,
+        jira_ids: jiraIds.length > 0 ? jiraIds : undefined,
+        valueedge_id: valueEdgeIds[0] || valueEdgeId || undefined,
+        valueedge_ids: valueEdgeIds.length > 0 ? valueEdgeIds : undefined,
+        files: uploadedFiles,
+        custom_instructions: reviewCustomInstructions.trim() || undefined,
+        review_test_cases: reviewTestCases,
+        review_user_guide: reviewUserGuide,
+        user_guide_url: userGuideUrl.trim() || undefined,
+        clarification_history: reviewClarificationConversation,
+      },
+      configuration: {
+        provider,
+        model,
+        temperature,
+      },
+    };
+  };
+
+  const runReview = async (
+    mode: 'test-cases' | 'user-guide' | 'both',
+    clarificationAnswer?: string,
+  ) => {
+    if (!validateReviewRequest(mode)) {
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const answer = (clarificationAnswer || '').trim();
+      let nextHistory = answer ? reviewClarificationConversation : [];
+
+      if (answer) {
+        const currentQuestions = reviewOutput?.metadata?.clarification_questions || [];
+        nextHistory = [...reviewClarificationConversation, { questions: currentQuestions, answer }];
+        setReviewClarificationConversation(nextHistory);
+      } else if (reviewClarificationConversation.length > 0) {
+        setReviewClarificationConversation([]);
+      }
+
+      const payload = buildReviewPayload();
+      payload.inputs.clarification_history = nextHistory;
+
+      const response = mode === 'test-cases'
+        ? await api.reviewTestCases(payload.inputs, payload.configuration)
+        : mode === 'user-guide'
+        ? await api.reviewUserGuide(payload.inputs, payload.configuration)
+        : await api.reviewBoth(payload.inputs, payload.configuration);
+
+      setReviewOutput(response.data);
+      if (response.data.status === 'clarification_required') {
+        toast('Clarification needed. Partial results are available.', { icon: '📝' });
+      } else {
+        toast.success('Review completed');
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || 'Review failed');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleReviewTestCases = async () => {
+    await runReview('test-cases');
+  };
+
+  const handleReviewUserGuide = async () => {
+    await runReview('user-guide');
+  };
+
+  const handleRunBothReviews = async () => {
+    await runReview('both');
+  };
+
+  const handleReviewClarificationSubmit = async (answer: string) => {
+    const reviewType = reviewOutput?.metadata?.review_type || 'both';
+    await runReview(reviewType, answer);
+  };
+
+  const handleReviewClarificationFileUpload = async (files: File[]) => {
+    for (const file of files) {
+      const uploaded = await api.uploadFile(file);
+      setUploadedFiles((prev) => [...prev, uploaded.data]);
+      if (reviewOutput?.review_id) {
+        await api.attachReviewClarificationFile(reviewOutput.review_id, file);
+      }
+    }
+  };
+
+  const refreshReviewStatus = async () => {
+    if (!reviewOutput) return;
+    const status = await api.reviewStatus(reviewOutput.review_id);
+    setReviewOutput(status.data);
+  };
+
   const steps = [
     { num: 1, label: 'Input', desc: 'Add requirements' },
-    { num: 2, label: 'Configure', desc: 'Set AI options' },
-    { num: 3, label: 'Generate', desc: 'Create tests' },
+    { num: 2, label: 'Configure', desc: 'Set AI & review options' },
+    { num: 3, label: 'Generate/Review', desc: 'Create or assess artifacts' },
   ];
 
   return (
@@ -195,7 +400,7 @@ export const HomePage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-slate-900">
                   TestGen <span className="gradient-text">AI</span>
                 </h1>
-                <p className="text-xs text-slate-500">Intelligent Test Case Generation</p>
+                <p className="text-xs text-slate-500">Intelligent Test Generation & Review</p>
               </div>
             </div>
 
@@ -268,7 +473,7 @@ export const HomePage: React.FC = () => {
               Welcome to TestGen AI
             </h2>
             <p className="text-slate-600 max-w-xl mx-auto mb-8 text-lg">
-              Generate comprehensive test plans and test cases using AI. 
+              Generate test plans/cases and run review workflows with AI.
               Start by providing requirements from JIRA, ValueEdge, or uploading documents.
             </p>
             <div className="flex flex-wrap justify-center gap-6">
@@ -279,6 +484,10 @@ export const HomePage: React.FC = () => {
               <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-4 py-2 rounded-full">
                 <Upload className="w-4 h-4 text-green-500" /> 
                 <span className="text-sm font-medium">File Upload</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-4 py-2 rounded-full">
+                <Beaker className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-medium">Review Workflows</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-4 py-2 rounded-full">
                 <Zap className="w-4 h-4 text-amber-500" /> 
@@ -293,11 +502,31 @@ export const HomePage: React.FC = () => {
           <InputSection
             jiraId={jiraId}
             setJiraId={setJiraId}
+            jiraIds={jiraIds}
+            setJiraIds={setJiraIds}
             valueEdgeId={valueEdgeId}
             setValueEdgeId={setValueEdgeId}
+            valueEdgeIds={valueEdgeIds}
+            setValueEdgeIds={setValueEdgeIds}
             uploadedFiles={uploadedFiles}
             onFileUpload={handleFileUpload}
             onRemoveFile={handleRemoveFile}
+          />
+        </div>
+
+        {/* Custom Prompt */}
+        <div className="content-card p-6 mb-6 animate-fade-in">
+          <PromptSection
+            testPlanPrompt={testPlanPrompt}
+            onTestPlanPromptChange={setTestPlanPrompt}
+            testCasePrompt={testCasePrompt}
+            onTestCasePromptChange={setTestCasePrompt}
+            useTestPlanTemplate={useTestPlanTemplate}
+            onUseTestPlanTemplateChange={setUseTestPlanTemplate}
+            useTestCaseTemplate={useTestCaseTemplate}
+            onUseTestCaseTemplateChange={setUseTestCaseTemplate}
+            provider={provider}
+            model={model}
           />
         </div>
 
@@ -313,11 +542,17 @@ export const HomePage: React.FC = () => {
           />
         </div>
 
-        {/* Custom Prompt */}
         <div className="content-card p-6 mb-6 animate-fade-in">
-          <PromptSection
-            value={customPrompt}
-            onChange={setCustomPrompt}
+          <ReviewSection
+            reviewTestCases={reviewTestCases}
+            setReviewTestCases={setReviewTestCases}
+            reviewUserGuide={reviewUserGuide}
+            setReviewUserGuide={setReviewUserGuide}
+            userGuideUrl={userGuideUrl}
+            setUserGuideUrl={setUserGuideUrl}
+            reviewCustomInstructions={reviewCustomInstructions}
+            setReviewCustomInstructions={setReviewCustomInstructions}
+            onReviewFilesSelected={handleReviewFilesSelected}
             provider={provider}
             model={model}
           />
@@ -344,6 +579,20 @@ export const HomePage: React.FC = () => {
           </button>
         </div>
 
+        <div className="flex flex-wrap justify-center gap-3 mb-8 animate-fade-in">
+          <button onClick={handleReviewTestCases} disabled={isGenerating} className="btn-primary px-6 py-3">
+            Review Test Cases
+          </button>
+          <button onClick={handleReviewUserGuide} disabled={isGenerating} className="btn-primary px-6 py-3">
+            Review User Guide
+          </button>
+          {reviewTestCases && reviewUserGuide && (
+            <button onClick={handleRunBothReviews} disabled={isGenerating} className="btn-secondary px-6 py-3">
+              Run Both Reviews
+            </button>
+          )}
+        </div>
+
         {/* Output Preview */}
         {output && (
           <div className="content-card p-6 animate-fade-in">
@@ -354,6 +603,19 @@ export const HomePage: React.FC = () => {
               onSubmitClarification={(answers) => handleGenerate(answers)}
               onUploadClarificationFiles={handleClarificationFileUpload}
               clarificationHistory={clarificationConversation}
+            />
+          </div>
+        )}
+
+        {reviewOutput && (
+          <div className="content-card p-6 mt-6 animate-fade-in">
+            <ReviewOutput
+              review={reviewOutput}
+              onRefreshStatus={refreshReviewStatus}
+              refreshing={isGenerating}
+              onSubmitClarification={handleReviewClarificationSubmit}
+              onUploadClarificationFiles={handleReviewClarificationFileUpload}
+              clarificationHistory={reviewClarificationConversation}
             />
           </div>
         )}

@@ -52,6 +52,10 @@ class DocumentParser:
     SUPPORTED_TYPES = {
         "application/pdf": "pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "text/plain": "text",
+        "text/markdown": "text",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
+        "application/vnd.ms-excel": "spreadsheet",
         "image/png": "image",
         "image/jpeg": "image",
         "image/jpg": "image"
@@ -104,6 +108,10 @@ class DocumentParser:
                 return await self._parse_docx(file_path, content_type)
             elif doc_type == "image":
                 return await self._parse_image(file_path, content_type)
+            elif doc_type == "text":
+                return await self._parse_text(file_path, content_type)
+            elif doc_type == "spreadsheet":
+                return await self._parse_spreadsheet(file_path, content_type)
             else:
                 raise UnsupportedFileError(f"Unknown document type: {doc_type}")
                 
@@ -209,6 +217,42 @@ class DocumentParser:
             
         except Exception as e:
             raise ExtractionError(f"Image OCR failed: {e}")
+
+    async def _parse_text(self, file_path: str, content_type: str) -> ExtractedContent:
+        """Extract plain text from TXT/Markdown artifacts."""
+        try:
+            text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+            return ExtractedContent(
+                filename=os.path.basename(file_path),
+                content_type=content_type,
+                text=text.strip(),
+                page_count=1,
+            )
+        except Exception as e:
+            raise ExtractionError(f"Text parsing failed: {e}")
+
+    async def _parse_spreadsheet(self, file_path: str, content_type: str) -> ExtractedContent:
+        """Extract flattened text from Excel sheets for review analysis."""
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ExtractionError("pandas/openpyxl not installed")
+
+        try:
+            sheets = pd.read_excel(file_path, sheet_name=None)
+            parts = []
+            for name, df in sheets.items():
+                parts.append(f"--- Sheet: {name} ---")
+                parts.append(df.fillna("").astype(str).to_csv(index=False))
+
+            return ExtractedContent(
+                filename=os.path.basename(file_path),
+                content_type=content_type,
+                text="\n".join(parts).strip(),
+                page_count=len(sheets),
+            )
+        except Exception as e:
+            raise ExtractionError(f"Spreadsheet parsing failed: {e}")
     
     def _preprocess_image(self, image: Image.Image) -> Image.Image:
         """Preprocess image for better OCR results."""

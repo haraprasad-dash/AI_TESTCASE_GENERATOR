@@ -1,6 +1,7 @@
 """
 LLM provider endpoints.
 """
+import re
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -10,6 +11,12 @@ from app.services.llm_orchestrator import (
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
+
+
+def _normalize_groq_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    return re.sub(r"^bearer\s+", "", value.strip(), flags=re.IGNORECASE).strip()
 
 
 @router.post("/test-connection")
@@ -22,7 +29,7 @@ async def test_llm_connection(
     
     try:
         if provider == "groq":
-            api_key = x_groq_api_key or settings.groq_api_key
+            api_key = _normalize_groq_key(x_groq_api_key) or _normalize_groq_key(settings.groq_api_key)
             if not api_key:
                 raise HTTPException(400, "Groq API key not configured")
             orchestrator = create_orchestrator(
@@ -56,7 +63,7 @@ async def list_models(
     
     try:
         if provider == "groq":
-            api_key = x_groq_api_key or settings.groq_api_key
+            api_key = _normalize_groq_key(x_groq_api_key) or _normalize_groq_key(settings.groq_api_key)
             if not api_key:
                 raise HTTPException(400, "Groq API key not configured")
             orchestrator = create_orchestrator(

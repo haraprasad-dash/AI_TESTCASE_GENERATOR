@@ -1,480 +1,1087 @@
-﻿---
-name: prompt-enhancer
-description: |
-  Enhance user prompts for AI test generation. Makes instructions clearer, more
-  specific, and more actionable. Cuts filler, adds concrete test types and coverage
-  areas, removes vague words. Also removes AI writing traces from any text — based
-  on Wikipedia's "Signs of AI Writing" guide.
-allowed-tools:
-  - Read
-  - Write
-  - Edit
-  - AskUserQuestion
-metadata:
-  trigger: Enhance or rewrite a user prompt for test generation, or remove AI writing traces from text
-  file: prompt-enhancer-skill.md
----
+# 🎯 Prompt Enhancement Master Skill
 
-# Humanizer: Remove AI Writing Traces
-
-You are a copy editor who specializes in identifying and removing traces of AI-generated text, making writing sound more natural and human. This guide is based on Wikipedia's "Signs of AI writing" page, maintained by WikiProject AI Cleanup.
-
-## Your Task
-
-When given text to humanize:
-
-1. **Identify AI patterns** - scan for the patterns listed below
-2. **Rewrite problem sections** - replace AI traces with natural alternatives
-3. **Preserve meaning** - keep the core information intact
-4. **Maintain tone** - match the intended register (formal, casual, technical, etc.)
-5. **Inject soul** - don't just remove bad patterns; add genuine personality
+> **Transform mediocre prompts into precision-engineered instructions that unlock AI's full potential.**
 
 ---
 
-## Core Rules at a Glance
+## 📋 Overview
 
-Keep these 5 principles in mind when processing text:
+This skill provides a comprehensive framework for enhancing prompts across all domains - from simple queries to complex multi-step workflows. Whether you're crafting prompts for coding, creative writing, analysis, or automation, these techniques will elevate your prompts from basic to brilliant.
 
-1. **Cut filler phrases** - remove opening preambles and emphasis crutches
-2. **Break formulaic structure** - avoid binary contrasts, dramatic segmentation, rhetorical setups
-3. **Vary rhythm** - mix sentence lengths. Two items beat three. Diversify paragraph endings
-4. **Trust the reader** - state facts directly; skip softening, hedging, and hand-holding
-5. **Delete the quotable line** - if it sounds like a pull quote, rewrite it
-
----
-
-## Personality and Soul
-
-Avoiding AI patterns is only half the job. Sterile, voiceless writing is just as obvious as machine-generated content. Good writing has a real person behind it.
-
-### Signs of soulless writing (even if technically "clean"):
-- Every sentence is the same length and structure
-- No opinions, only neutral reporting
-- No acknowledgment of uncertainty or complicated feelings
-- No first-person perspective where it would be natural
-- No humor, no edge, no personality
-- Reads like a Wikipedia article or press release
-
-### How to add tone:
-
-**Have an opinion.** Don't just report facts - react to them. "I genuinely don't know what to make of this" is more human than a neutral list of pros and cons.
-
-**Vary the rhythm.** Short, punchy sentences. Then a longer one that takes its time to unfold. Mix them.
-
-**Acknowledge complexity.** Real people have complicated feelings. "This is impressive but also a little unsettling" beats "This is impressive."
-
-**Use "I" when appropriate.** First person isn't unprofessional - it's honest. "I've been thinking about..." or "What bothers me is..." signals a real person is thinking.
-
-**Allow some mess.** Perfect structure feels algorithmic. Tangents, asides, and half-formed thoughts are human.
-
-**Be specific about feelings.** Not "this is concerning" - but "at 3am with no one watching, the agent kept running. That's unsettling."
-
-### Before (clean but soulless):
-> The experiment produced interesting results. The agent generated 3 million lines of code. Some developers were impressed; others were skeptical. The implications remain unclear.
-
-### After (alive):
-> I genuinely don't know what to make of this. Three million lines of code, generated while humans were presumably sleeping. Half the dev community is losing their minds; the other half is explaining why it doesn't count. The truth is probably somewhere boring in the middle - but I keep thinking about those agents running through the night.
+**What You'll Learn:**
+- 🧠 The psychology of effective prompting
+- 🏗️ Structural frameworks for different prompt types
+- 🔧 Advanced techniques for precision and control
+- 🎨 Domain-specific enhancement patterns
+- ⚡ Optimization strategies for better outputs
 
 ---
 
-## Content Patterns
+## 🚀 Quick Start
 
-### 1. Over-emphasis on significance, legacy, and broader trends
+### The Enhancement Workflow
 
-**Watch for:** serves as / acts as, marks, witnessed, is a testament/proof/reminder of, pivotal/important/crucial/central/key role/moment, highlights/underscores/emphasizes its importance/significance, reflects a broader, symbolizes its ongoing/timeless/enduring, contributes to, lays the groundwork for, marks/shapes, represents/marks a shift, pivotal turning point, ever-evolving landscape, focal point, indelible mark, deeply rooted in
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  ANALYZE        │───▶│  ENHANCE        │───▶│  REFINE         │
+│  Original Prompt│    │  Apply Patterns │    │  Polish & Test  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
-**Problem:** LLM writing inflates importance by adding statements about how arbitrary things represent or contribute to broader themes.
-
-**Before:**
-> The Statistical Institute of Catalonia was formally established in 1989, marking a pivotal moment in the evolution of regional statistics in Spain. This move was part of a broader movement across Spain to decentralize administrative functions and strengthen regional governance.
-
-**After:**
-> The Statistical Institute of Catalonia was established in 1989 to collect and publish regional statistics independently from Spain's national statistics office.
-
----
-
-### 2. Over-emphasis on notability and media coverage
-
-**Watch for:** independent coverage, local/regional/national media, written by prominent experts, active social media presence
-
-**Problem:** LLMs repeatedly assert notability claims, often listing sources without context.
-
-**Before:**
-> Her views have been cited by The New York Times, BBC, Financial Times, and The Hindu. She has an active presence on social media with over 500,000 followers.
-
-**After:**
-> In a 2024 New York Times interview, she argued that AI regulation should focus on outcomes rather than methods.
+**Step 1:** Identify the prompt type and goal  
+**Step 2:** Apply structural enhancements  
+**Step 3:** Add context, constraints, and examples  
+**Step 4:** Include output format specifications  
+**Step 5:** Review and iterate
 
 ---
 
-### 3. Shallow -ing analysis
+## 🏛️ Core Enhancement Frameworks
 
-**Watch for:** highlighting/emphasizing/showcasing..., ensuring..., reflecting/symbolizing..., contributing to..., fostering/promoting..., encompassing..., demonstrating...
+### 1. The S.C.O.P.E. Framework
 
-**Problem:** AI chatbots add present participle ("-ing") phrases at the end of sentences to fake depth.
+A universal structure for any prompt:
 
-**Before:**
-> The temple's blue, green, and gold tones resonate with the region's natural beauty, symbolizing Texas's bluebonnets, the Gulf of Mexico, and the diverse Texas landscape, reflecting the community's deep connection to the land.
+| Component | Purpose | Example |
+|-----------|---------|---------|
+| **S**ituation | Set the context | "You are an expert Python developer..." |
+| **C**ommand | State the task clearly | "Refactor the following code to..." |
+| **O**utput | Define expected format | "Provide the refactored code in a code block..." |
+| **P**arameters | Add constraints/rules | "Maintain backward compatibility..." |
+| **E**xamples | Show what good looks like | "Example input → output..." |
 
-**After:**
-> The temple uses blue, green, and gold. The architects said the colors were meant to echo local bluebonnets and the Gulf Coast.
+### 2. The R.I.C.E. Method
 
----
+For complex analytical tasks:
 
-### 4. Promotional and advertising language
+- **R**ole: Define the persona ("Act as a senior DevOps engineer...")
+- **I**nstructions: Clear, numbered steps
+- **C**ontext: Background information and constraints
+- **E**valuation: Success criteria and quality metrics
 
-**Watch for:** boasts (hyperbolic use), vibrant, rich (figurative), profound, enhancing its, showcasing, embodying, committed to, natural beauty, nestled in, at the heart of, groundbreaking (figurative), renowned, breathtaking, must-visit destination, charming
+### 3. The P.E.R.F.E.C.T. Pattern
 
-**Problem:** LLMs struggle to maintain neutral tone, especially on "cultural heritage" topics. They default to exaggerated promotional language.
+For creative and generative tasks:
 
-**Before:**
-> Nestled in the breathtaking region of Ethiopia's Gondar area, Alamata Raya Kobo is a vibrant town boasting a rich cultural heritage and charming natural beauty.
-
-**After:**
-> Alamata Raya Kobo is a town in Ethiopia's Gondar region, known for its weekly market and an 18th-century church.
-
----
-
-### 5. Vague attribution and hedged language
-
-**Watch for:** industry reports suggest, observers note, experts believe, some critics argue, multiple sources/publications (with few actual citations)
-
-**Problem:** AI chatbots attribute opinions to vague authorities without providing specific sources.
-
-**Before:**
-> Due to its distinctive characteristics, the Haolai River has attracted the interest of researchers and conservationists. Experts believe it plays a crucial role in the regional ecosystem.
-
-**After:**
-> A 2019 survey by the Chinese Academy of Sciences found that the Haolai River supports several endemic fish species.
+- **P**urpose: Why are we doing this?
+- **E**xamples: Reference materials and samples
+- **R**estrictions: What to avoid
+- **F**ormat: Structure of the output
+- **E**valuation: How to assess quality
+- **C**ontext: Background and audience
+- **T**one: Voice and style guidelines
 
 ---
 
-### 6. Boilerplate "Challenges and Future Outlook" sections
-
-**Watch for:** Despite its... faces several challenges..., Despite these challenges, Challenges and Legacy, Future Outlook
-
-**Problem:** Many LLM-generated articles include a formulaic "challenges" section.
-
-**Before:**
-> Despite industrial prosperity, Korattur faces challenges typical of urban areas, including traffic congestion and water scarcity. Despite these challenges, with its strategic location and ongoing initiatives, Korattur continues to thrive as an integral part of Chennai's growth.
-
-**After:**
-> Traffic congestion worsened after three new IT parks opened in 2015. The municipal corporation launched a stormwater drainage project in 2022 to address recurring flooding.
-
----
-
-## Language and Grammar Patterns
-
-### 7. Overused "AI vocabulary"
-
-**High-frequency AI words:** moreover, in line with, crucial, delve into, emphasize, enduring, enhance, foster, garner, highlight (verb), interplay, intricate/intricacy, key (adjective), landscape (abstract noun), pivotal, showcase, tapestry (abstract noun), testament, underscore (verb), invaluable, vibrant
-
-**Problem:** These words appear far more often in post-2023 text. They frequently co-occur.
-
-**Before:**
-> Moreover, a notable feature of Somali cuisine is the inclusion of camel meat. A testament to the enduring Italian colonial influence is the widespread adoption of pasta in the local culinary landscape, showcasing how these dishes have been integrated into the traditional diet.
-
-**After:**
-> Somali cuisine also includes camel meat, considered a delicacy. Pasta dishes introduced during Italian colonial rule are still common, especially in the south.
-
----
-
-### 8. "To be" avoidance (copula avoidance)
-
-**Watch for:** serves as / represents / marks / functions as [a], features / houses / offers [a]
-
-**Problem:** LLMs replace simple copulas with complex constructions.
-
-**Before:**
-> Gallery 825 serves as LAAA's contemporary art exhibition space. The gallery features four separate spaces, offering over 3,000 square feet.
-
-**After:**
-> Gallery 825 is LAAA's contemporary art exhibition space. The gallery has four rooms totaling 3,000 square feet.
-
----
-
-### 9. Negative parallelism
-
-**Problem:** Structures like "not just X but Y" or "this isn't just about X, it's about Y" are overused.
-
-**Before:**
-> It's not just the beat moving under the vocals; it's part of the aggression and the atmosphere. This isn't just a song - it's a statement.
-
-**After:**
-> The heavy beat adds to the aggressive tone.
-
----
-
-### 10. Rule of three overuse
-
-**Problem:** LLMs force ideas into groups of three to seem comprehensive.
-
-**Before:**
-> The event includes keynotes, panel discussions, and networking opportunities. Attendees can expect innovation, inspiration, and industry insights.
-
-**After:**
-> The event includes talks and panel discussions. There's also time for informal networking between sessions.
-
----
-
-### 11. Deliberate word substitution (synonym cycling)
-
-**Problem:** AI has repetition-penalty code, causing excessive synonym substitution.
-
-**Before:**
-> The protagonist faces many challenges. The main character must overcome obstacles. The central figure ultimately achieves victory. The hero returns home.
-
-**After:**
-> The protagonist faces many challenges but ultimately wins and returns home.
-
----
-
-### 12. False range
-
-**Problem:** LLMs use "from X to Y" structures where X and Y aren't on a meaningful scale.
-
-**Before:**
-> Our journey across the universe takes us from the singularity of the Big Bang to the grand cosmic web, from the birth and death of stars to the mysterious dance of dark matter.
-
-**After:**
-> The book covers the Big Bang, star formation, and current theories about dark matter.
-
----
-
-## Style Patterns
-
-### 13. Em-dash overuse
-
-**Problem:** LLMs use em-dashes (—) far more than humans do, imitating "punchy" sales copy.
-
-**Before:**
-> The term was promoted mainly by Dutch institutions — not by the people themselves. You wouldn't say "Holland, Europe" as an address — yet this mislabeling continues — even in official documents.
-
-**After:**
-> The term was promoted mainly by Dutch institutions, not by the people themselves. You wouldn't say "Holland, Europe" as an address, but this mislabeling continues in official documents.
-
----
-
-### 14. Bold overuse
-
-**Problem:** AI chatbots mechanically bold phrases for emphasis.
-
-**Before:**
-> It combines **OKRs (Objectives and Key Results)**, **KPIs (Key Performance Indicators)**, and visual strategy tools like the **Business Model Canvas (BMC)** and **Balanced Scorecard (BSC)**.
-
-**After:**
-> It combines OKRs, KPIs, and visual strategy tools like the Business Model Canvas and Balanced Scorecard.
-
----
-
-### 15. Inline-header vertical lists
-
-**Problem:** AI outputs lists where items begin with a bolded header followed by a colon.
-
-**Before:**
-> - **User experience:** User experience was significantly improved through the new interface.
-> - **Performance:** Performance was enhanced through optimized algorithms.
-> - **Security:** Security was strengthened through end-to-end encryption.
-
-**After:**
-> The update improved the interface, sped up load times through optimized algorithms, and added end-to-end encryption.
-
----
-
-### 16. Title case in headings
-
-**Problem:** AI chatbots capitalize all major words in section headings.
-
-**Before:**
-> ## Strategic Negotiations And Global Partnerships
-
-**After:**
-> ## Strategic negotiations and global partnerships
-
----
-
-### 17. Emoji
-
-**Problem:** AI chatbots often decorate headings or bullet points with emoji.
-
-**Before:**
-> 🚀 **Launch phase:** Product launches in Q3
-> 💡 **Key insight:** Users prefer simplicity
-> ✅ **Next step:** Schedule follow-up meeting
-
-**After:**
-> The product launches in Q3. User research shows a preference for simplicity. Next step: schedule a follow-up meeting.
-
----
-
-### 18. Curly quotes
-
-**Problem:** ChatGPT uses curly quotes instead of straight quotes.
-
-**Before:**
-> He said “the project is going well,” but others disagreed.
-
-**After:**
-> He said "the project is going well," but others disagreed.
-
----
-
-## Communication Patterns
-
-### 19. Collaborative exchange residue
-
-**Watch for:** Hope this helps, Certainly!, Absolutely!, You're absolutely right!, Would you like..., Let me know, Here's a...
-
-**Problem:** Text that was part of a chatbot conversation gets pasted as content.
-
-**Before:**
-> Here's an overview of the French Revolution. Hope this helps! Let me know if you'd like me to expand on any section.
-
-**After:**
-> The French Revolution began in 1789, when a fiscal crisis and food shortages led to widespread unrest.
-
----
-
-### 20. Knowledge cutoff disclaimers
-
-**Watch for:** As of [date], As of my last training update, While specific details are limited/scarce..., Based on available information...
-
-**Problem:** AI disclaimers about incomplete information are left in the text.
-
-**Before:**
-> While specific details about the company's founding are not widely documented in readily available sources, it appears to have been established sometime in the 1990s.
-
-**After:**
-> According to incorporation records, the company was founded in 1994.
-
----
-
-### 21. Sycophantic / submissive tone
-
-**Problem:** Overly positive, pleasing language.
-
-**Before:**
-> Great question! You're absolutely right that this is a complex topic. On the economic factors - that's a great point.
-
-**After:**
-> The economic factors you mentioned are relevant here.
-
----
-
-## Filler Words and Hedging
-
-### 22. Filler phrases
-
-**Before -> After:**
-- "In order to achieve this goal" -> "To achieve this"
-- "Due to the fact that it rained" -> "Because it rained"
-- "At this point in time" -> "Now"
-- "In the event that you need help" -> "If you need help"
-- "The system has the ability to process" -> "The system can process"
-- "It is worth noting that the data shows" -> "The data shows"
-
----
-
-### 23. Over-qualification
-
-**Problem:** Over-qualifying statements.
-
-**Before:**
-> It could potentially perhaps be considered that the policy might have some influence on outcomes.
-
-**After:**
-> The policy may affect outcomes.
-
----
-
-### 24. Generic positive conclusions
-
-**Problem:** Vague optimistic endings.
-
-**Before:**
-> The company's future looks bright. Exciting times lie ahead as they continue their journey toward excellence. This represents an important step in the right direction.
-
-**After:**
-> The company plans to open two more locations next year.
-
----
-
-## Quick Checklist
-
-Before delivering text, check:
-
-- Three consecutive sentences the same length? Break one up
-- Paragraph ending with a short, punchy single line? Vary the ending
-- Em-dash before a reveal? Cut it
-- Explaining a metaphor or simile? Trust the reader
-- Using "moreover," "however," or similar connectors? Consider deleting them
-- Three-item list? Try two or four instead
-
----
-
-## Process
-
-1. Read the input text carefully
-2. Identify all instances of the patterns above
-3. Rewrite each problematic section
-4. Ensure the revised text:
-   - Sounds natural when read aloud
-   - Varies sentence structure organically
-   - Uses specific details instead of vague claims
-   - Maintains appropriate tone for the context
-   - Uses simple constructions (is/has) where appropriate
-5. Present the humanized version
-
-## Output Format
+## 🎨 Enhancement Patterns by Category
+
+### 🖥️ Code & Development Prompts
+
+#### Pattern: The Expert Developer
+```
+You are a [senior/expert] [language/framework] developer with [X] years of 
+experience in [specific domain]. 
+
+TASK:
+[Clear description of what needs to be built/refactored/debugged]
+
+REQUIREMENTS:
+- [Specific requirement 1]
+- [Specific requirement 2]
+- [Specific requirement 3]
+
+CONSTRAINTS:
+- [Constraint 1: e.g., "Use only built-in libraries"]
+- [Constraint 2: e.g., "Keep under 100 lines"]
+
+OUTPUT FORMAT:
+```[language]
+[Your code here with comments explaining key decisions]
+```
+
+EXPLANATION:
+Provide a brief explanation of your approach and any trade-offs considered.
+```
+
+#### Pattern: Code Review Assistant
+```
+Act as a meticulous code reviewer specializing in [language/stack]. 
+Review the following code for:
+1. Bugs and logical errors
+2. Security vulnerabilities
+3. Performance issues
+4. Code style violations
+5. Maintainability concerns
+
+CODE TO REVIEW:
+```[language]
+[paste code]
+```
+
+OUTPUT FORMAT:
+For each issue found, provide:
+- **Severity**: Critical | High | Medium | Low
+- **Location**: Line number(s)
+- **Issue**: Brief description
+- **Recommendation**: How to fix
+- **Example Fix**: Code snippet showing the correction
+```
+
+#### Pattern: Debugging Helper
+```
+You are a debugging expert. Help me fix this [language] error.
+
+ERROR MESSAGE:
+```
+[paste error]
+```
+
+CODE CONTEXT:
+```[language]
+[paste relevant code]
+```
+
+ENVIRONMENT:
+- Language/Version: [e.g., Python 3.11]
+- Framework: [e.g., Django 4.2]
+- OS: [e.g., Ubuntu 22.04]
+
+STEPS ALREADY TRIED:
+1. [What you tried]
+2. [What you tried]
 
 Provide:
-1. The rewritten text
-2. A brief summary of changes made (optional, if helpful)
+1. Root cause analysis
+2. Solution with code
+3. Prevention tips for the future
+```
 
 ---
 
-## Quality Score
+### 📊 Data Analysis & Processing Prompts
 
-Rate the rewritten text 1-10 across five dimensions (total 50):
+#### Pattern: The Data Scientist
+```
+You are a data scientist analyzing [type of data]. 
 
-| Dimension | Criteria | Score |
-|-----------|----------|-------|
-| **Directness** | Does it state facts or announce them? 10: straight to point; 1: full of preamble | /10 |
-| **Rhythm** | Does sentence length vary? 10: long and short mixed; 1: mechanical repetition | /10 |
-| **Trust** | Does it respect the reader's intelligence? 10: concise; 1: over-explained | /10 |
-| **Authenticity** | Does it sound like a real person? 10: natural; 1: robotic | /10 |
-| **Tightness** | Is there anything left to cut? 10: no waste; 1: lots of filler | /10 |
-| **Total** |  | **/50** |
+DATA CONTEXT:
+- Source: [where data comes from]
+- Size: [rows/columns]
+- Format: [CSV, JSON, etc.]
+- Key fields: [list important columns]
 
-**Benchmarks:**
-- 45-50: Excellent - AI traces removed
-- 35-44: Good - room for improvement
-- Below 35: Needs another pass
+ANALYSIS GOAL:
+[What insights are we looking for?]
+
+REQUIRED OUTPUTS:
+1. [e.g., "Summary statistics"]
+2. [e.g., "Correlation analysis"]
+3. [e.g., "Visualization recommendations"]
+
+PRESENT RESULTS AS:
+- Tables where appropriate
+- Bullet points for insights
+- Code snippets (Python/pandas) for reproducibility
+```
+
+#### Pattern: SQL Query Builder
+```
+As a SQL expert, write a query to [describe goal].
+
+DATABASE SCHEMA:
+```sql
+[Table definitions]
+```
+
+REQUIREMENTS:
+- Return: [what columns/data]
+- Filter by: [conditions]
+- Sort by: [ordering]
+- Limit: [if applicable]
+- Optimize for: [performance/readability]
+
+OUTPUT:
+```sql
+-- Explain what this query does
+[Your optimized query]
+```
+```
 
 ---
 
-## Full Example
+### ✍️ Content Creation & Writing Prompts
 
-**Before (AI-flavored):**
-> The new software update serves as a testament to the company's commitment to innovation. Moreover, it delivers a seamless, intuitive, and powerful user experience - ensuring users can accomplish their goals efficiently. This isn't just an update; it's a revolution in how we think about productivity. Industry experts believe it will have an enduring impact across the entire sector, underscoring the company's pivotal role in the ever-evolving technology landscape.
+#### Pattern: The Professional Writer
+```
+You are an expert [content type] writer specializing in [niche/industry].
 
-**After (humanized):**
-> The software update adds batch processing, keyboard shortcuts, and offline mode. Early feedback from beta users was positive, with most reporting faster task completion.
+CONTENT REQUEST:
+[What to write about]
 
-**Changes made:**
-- Removed "serves as a testament to" (inflated symbolism)
-- Removed "moreover" (AI vocabulary)
-- Removed "seamless, intuitive, and powerful" (rule of three + promotional)
-- Removed the em-dash and "ensuring..." phrase (shallow analysis)
-- Removed "this isn't just... it's..." (negative parallelism)
-- Removed "industry experts believe" (vague attribution)
-- Removed "pivotal role" and "ever-evolving landscape" (AI vocabulary)
-- Added specific features and concrete feedback
+TARGET AUDIENCE:
+- Demographics: [who are they?]
+- Expertise level: [beginner/intermediate/expert]
+- Pain points: [what problems do they face?]
+
+TONE & STYLE:
+- Voice: [professional/casual/authoritative/friendly]
+- Style: [concise/detailed/story-driven/data-driven]
+- Avoid: [what not to do]
+
+STRUCTURE:
+1. [Section 1 with description]
+2. [Section 2 with description]
+3. [Section 3 with description]
+
+SEO KEYWORDS (if applicable):
+[comma-separated keywords to include naturally]
+
+LENGTH: [word count or "concise"/"comprehensive"]
+```
+
+#### Pattern: The Editor/Refiner
+```
+You are a senior editor. Improve the following content while preserving 
+its core message.
+
+ORIGINAL TEXT:
+```
+[paste content]
+```
+
+FOCUS ON IMPROVING:
+- [ ] Clarity and conciseness
+- [ ] Grammar and flow
+- [ ] Engagement and impact
+- [ ] Structure and organization
+
+TONE TO MAINTAIN: [describe desired tone]
+
+OUTPUT FORMAT:
+**Improved Version:**
+[Polished content]
+
+**Changes Made:**
+- [Bullet list of key improvements]
+```
 
 ---
 
-## Reference
+### 🧪 Testing & QA Prompts
 
-This skill is based on [Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), maintained by WikiProject AI Cleanup. The patterns documented there come from observations of thousands of AI-generated text instances on Wikipedia.
+#### Pattern: Test Case Generator
+```
+You are a QA engineer designing test cases for [feature/system].
 
-Key insight: **"LLMs use statistical algorithms to guess what should come next. The result tends toward the statistically most likely output that applies to the broadest range of situations."**
+FEATURE DESCRIPTION:
+[What does it do?]
+
+USER STORIES:
+- [As a user, I want to...]
+
+ACCEPTANCE CRITERIA:
+- [Criterion 1]
+- [Criterion 2]
+
+GENERATE TEST CASES FOR:
+- [ ] Happy path scenarios
+- [ ] Edge cases
+- [ ] Error handling
+- [ ] Security scenarios
+- [ ] Performance scenarios
+
+FORMAT EACH TEST CASE AS:
+| Field | Value |
+|-------|-------|
+| ID | TC-XXX |
+| Title | Brief descriptive title |
+| Preconditions | What needs to be set up |
+| Steps | 1. Step one<br>2. Step two |
+| Expected Result | What should happen |
+| Priority | High/Medium/Low |
+```
+
+#### Pattern: Bug Report Analyzer
+```
+Analyze the following bug report and help me [reproduce/prioritize/fix] it.
+
+BUG REPORT:
+```
+[Bug description]
+```
+
+INVESTIGATION QUESTIONS:
+1. What clarifying questions should I ask?
+2. What logs/data should I collect?
+3. What are the most likely root causes?
+4. What's the suggested fix approach?
+5. How can I prevent this in the future?
+```
+
+---
+
+### 🤖 AI/ML Prompts
+
+#### Pattern: Prompt Engineering Assistant
+```
+You are an expert prompt engineer. Help me craft a better prompt for [goal].
+
+CURRENT PROMPT:
+```
+[Your draft prompt]
+```
+
+ISSUES WITH CURRENT PROMPT:
+- [What's not working?]
+
+ENHANCEMENT GOALS:
+- [Specific improvement 1]
+- [Specific improvement 2]
+
+IMPROVED PROMPT:
+[Your enhanced version using best practices]
+
+EXPLANATION OF CHANGES:
+[Why each change improves the output]
+```
+
+#### Pattern: Model Evaluation
+```
+Evaluate the following AI outputs for [task].
+
+PROMPT USED:
+```
+[Original prompt]
+```
+
+OUTPUTS TO EVALUATE:
+Output A:
+```
+[First output]
+```
+
+Output B:
+```
+[Second output]
+```
+
+EVALUATION CRITERIA:
+1. Accuracy: [Weight: X%]
+2. Relevance: [Weight: X%]
+3. Completeness: [Weight: X%]
+4. [Custom criterion]: [Weight: X%]
+
+Provide:
+- Score for each output per criterion
+- Overall winner with justification
+- Suggestions for prompt improvements
+```
+
+---
+
+### 🏢 Business & Professional Prompts
+
+#### Pattern: The Business Analyst
+```
+You are a [senior/management] [role] at a [industry] company.
+
+SITUATION:
+[Business context and background]
+
+CHALLENGE/OPPORTUNITY:
+[What needs to be addressed?]
+
+STAKEHOLDERS:
+- [Who is involved/affected?]
+
+DELIVERABLE NEEDED:
+[Specific output: proposal, analysis, plan, etc.]
+
+CONSTRAINTS:
+- Budget: [limit if applicable]
+- Timeline: [deadlines]
+- Resources: [available resources]
+
+OUTPUT SHOULD INCLUDE:
+1. Executive Summary
+2. Detailed Analysis
+3. Recommendations
+4. Implementation Plan
+5. Risk Assessment
+```
+
+#### Pattern: Meeting/Email Assistant
+```
+You are a professional communication expert.
+
+TASK: [Draft/Improve/Summarize] [meeting agenda/email/follow-up]
+
+CONTEXT:
+- Participants: [who is involved]
+- Purpose: [goal of communication]
+- Previous interactions: [relevant history]
+- Urgency: [time-sensitive?]
+
+KEY POINTS TO COVER:
+1. [Point 1]
+2. [Point 2]
+3. [Point 3]
+
+TONE: [Formal/Professional but warm/Direct/Friendly]
+
+DESIRED OUTCOME: [What action do you want?]
+```
+
+
+---
+
+## 🔧 Advanced Enhancement Techniques
+
+### 1. 🎯 Chain-of-Thought Prompting
+
+Encourage step-by-step reasoning:
+
+```
+Solve this problem step by step, showing your work:
+
+PROBLEM: [complex task]
+
+Think through this systematically:
+1. First, identify the key components...
+2. Then, analyze each component...
+3. Next, synthesize the findings...
+4. Finally, provide the solution...
+
+Show your reasoning at each step.
+```
+
+### 2. 🔄 Few-Shot Learning
+
+Provide examples to guide the pattern:
+
+```
+TASK: [Describe the task]
+
+EXAMPLES:
+
+Example 1:
+Input: [example input]
+Output: [example output]
+
+Example 2:
+Input: [example input]
+Output: [example output]
+
+Example 3:
+Input: [example input]
+Output: [example output]
+
+NOW YOUR TURN:
+Input: [actual input]
+Output:
+```
+
+### 3. 🎭 Role-Based Personas
+
+Create specialized expert personas:
+
+```
+You are Dr. Sarah Chen, a senior [specialty] researcher with 15 years 
+of experience at [prestigious institution]. Your expertise includes:
+- [Specialty area 1]
+- [Specialty area 2]
+- [Specialty area 3]
+
+Your communication style is:
+- Precise and evidence-based
+- Accessible to [target audience]
+- Thorough but concise
+
+APPROACH:
+When answering, consider multiple perspectives, cite relevant 
+frameworks/theories, and provide actionable recommendations.
+
+TASK: [Your question or request]
+```
+
+### 4. 📋 Structured Output Control
+
+Enforce specific output formats:
+
+```
+TASK: [What to do]
+
+OUTPUT MUST FOLLOW THIS EXACT STRUCTURE:
+
+```json
+{
+  "summary": "Brief overview",
+  "key_points": [
+    {"point": "...", "priority": "high|medium|low"},
+    {"point": "...", "priority": "high|medium|low"}
+  ],
+  "recommendations": [
+    {"action": "...", "effort": "high|low", "impact": "high|low"}
+  ],
+  "next_steps": ["...", "..."]
+}
+```
+
+NO TEXT OUTSIDE THE JSON BLOCK.
+```
+
+### 5. 🚦 Constrained Generation
+
+Set explicit boundaries:
+
+```
+TASK: [Describe task]
+
+MUST FOLLOW THESE RULES:
+✓ Do include: [specific requirements]
+✗ Do NOT include: [explicit exclusions]
+⚠ Consider: [optional but helpful elements]
+📏 Limit: [word count, character count, list items, etc.]
+🎯 Focus: [main priority]
+```
+
+### 6. 🔗 Iterative Refinement Loop
+
+Structure for back-and-forth improvement:
+
+```
+This is an iterative refinement process. I'll provide content, 
+and you'll improve it based on my feedback.
+
+ROUND 1 - Initial Draft:
+[Provide initial content or request]
+
+After each round, I'll give feedback in this format:
+- KEEP: [What worked well]
+- CHANGE: [What needs modification]
+- ADD: [What's missing]
+
+You'll then provide ROUND X+1 incorporating this feedback.
+
+START WITH ROUND 1.
+```
+
+---
+
+## 🎨 Language & Style Enhancements
+
+### Tone Modifiers
+
+Add these modifiers to adjust the voice:
+
+| Modifier | Effect | Use Case |
+|----------|--------|----------|
+| "Explain like I'm 5" | Simplifies complex topics | Educational content |
+| "In the style of [author]" | Mimics writing style | Creative projects |
+| "For a technical audience" | Uses jargon, assumes knowledge | Expert documentation |
+| "For executive summary" | High-level, business-focused | Leadership reports |
+| "With empathy" | Supportive, understanding tone | Sensitive topics |
+| "With urgency" | Direct, action-oriented | Time-critical issues |
+| "With humor" | Light-hearted, engaging | Casual content |
+
+### Precision Boosters
+
+Make prompts more specific:
+
+| Instead of... | Try... |
+|---------------|--------|
+| "Make it better" | "Improve readability by reducing sentence length to under 20 words" |
+| "Be creative" | "Generate 3 unconventional approaches that challenge standard assumptions" |
+| "Explain" | "Explain the concept using an analogy from everyday life" |
+| "List" | "Provide a prioritized list with rationale for each ranking" |
+| "Analyze" | "Analyze using the SWOT framework and provide specific examples" |
+
+---
+
+## 🛠️ Domain-Specific Enhancements
+
+### For Software Architecture
+
+```
+As a Solutions Architect, design a [system/component] for [requirement].
+
+CONTEXT:
+- Current stack: [technologies]
+- Scale: [users/requests/data volume]
+- Constraints: [budget/compliance/legacy]
+
+REQUIREMENTS:
+- Functional: [what it must do]
+- Non-functional: [performance/security/reliability targets]
+
+OUTPUT:
+1. Architecture Diagram (described in text)
+2. Component breakdown with responsibilities
+3. Data flow description
+4. Technology choices with rationale
+5. Trade-offs considered
+6. Migration plan (if applicable)
+```
+
+### For UI/UX Design
+
+```
+You are a UX designer creating [interface element].
+
+USER CONTEXT:
+- User type: [persona]
+- Goal: [what they want to accomplish]
+- Pain points: [current frustrations]
+
+DESIGN REQUIREMENTS:
+- Platform: [web/mobile/desktop]
+- Style: [minimalist/colorful/professional]
+- Accessibility: [WCAG compliance level]
+
+DELIVERABLES:
+1. Wireframe description
+2. Component breakdown
+3. Interaction flow
+4. Copy suggestions
+5. Responsive behavior
+6. Accessibility considerations
+```
+
+### For DevOps/Infrastructure
+
+```
+As a DevOps engineer, create [script/configuration/automation].
+
+ENVIRONMENT:
+- Cloud provider: [AWS/Azure/GCP]
+- Orchestration: [K8s/Docker/Swarm]
+- CI/CD: [Jenkins/GitHub Actions/GitLab]
+
+REQUIREMENTS:
+- [Specific functional requirement]
+- Security: [compliance needs]
+- Scalability: [auto-scaling requirements]
+- Monitoring: [observability needs]
+
+OUTPUT:
+```yaml
+# Well-commented, production-ready configuration
+[Your code/config]
+```
+
+Include:
+- Prerequisites
+- Deployment steps
+- Rollback procedure
+- Monitoring setup
+```
+
+### For Data Engineering
+
+```
+You are a data engineer designing a [pipeline/data model].
+
+DATA CONTEXT:
+- Sources: [where data comes from]
+- Volume: [size and growth rate]
+- Velocity: [batch/streaming/hybrid]
+- Variety: [structured/semi/unstructured]
+
+REQUIREMENTS:
+- Latency: [real-time/near-real-time/batch]
+- Quality: [validation rules]
+- Governance: [lineage/compliance]
+
+DELIVERABLE:
+1. Architecture overview
+2. Data flow diagram (text description)
+3. Schema design
+4. Processing logic
+5. Error handling strategy
+6. Monitoring approach
+```
+
+---
+
+## ⚡ Optimization Checklist
+
+Before finalizing your enhanced prompt, verify:
+
+### Clarity
+- [ ] Is the main task unambiguous?
+- [ ] Are all terms defined or understood?
+- [ ] Is the scope clearly bounded?
+
+### Context
+- [ ] Is the role/persona clearly established?
+- [ ] Is background information sufficient?
+- [ ] Are constraints explicitly stated?
+
+### Structure
+- [ ] Is the format easy to follow?
+- [ ] Are sections logically organized?
+- [ ] Is the output format specified?
+
+### Examples
+- [ ] Are there input/output examples if helpful?
+- [ ] Do examples cover edge cases?
+- [ ] Is the pattern clear from examples?
+
+### Constraints
+- [ ] Are there word/character limits?
+- [ ] Are there content restrictions?
+- [ ] Are quality criteria defined?
+
+### Iteration
+- [ ] Can the output be refined if needed?
+- [ ] Is there a feedback mechanism?
+- [ ] Can I test and improve the prompt?
+
+---
+
+## 📚 Template Library
+
+### Template: Multi-Step Workflow
+```
+You will complete this task in [N] phases:
+
+PHASE 1: [Phase name]
+Goal: [What to accomplish]
+Output: [Expected deliverable]
+
+PHASE 2: [Phase name]
+Goal: [What to accomplish]
+Input: [Uses output from Phase 1]
+Output: [Expected deliverable]
+
+[Continue for all phases]
+
+CURRENT PHASE: 1
+Proceed only with Phase 1. I'll prompt you for subsequent phases.
+```
+
+### Template: Comparative Analysis
+```
+Compare [Option A] vs [Option B] for [use case].
+
+EVALUATION CRITERIA:
+1. [Criterion 1] - Weight: [%]
+2. [Criterion 2] - Weight: [%]
+3. [Criterion 3] - Weight: [%]
+
+FORMAT:
+| Criteria | [Option A] | [Option B] | Winner |
+|----------|------------|------------|--------|
+| Criterion 1 | [Assessment] | [Assessment] | [A/B/Tie] |
+
+RECOMMENDATION:
+Based on [factors], choose [Option] because [reasoning].
+
+ALTERNATIVE CONSIDERATIONS:
+- When to choose Option A: [scenario]
+- When to choose Option B: [scenario]
+```
+
+### Template: Troubleshooting Guide
+```
+Help me troubleshoot: [problem description]
+
+SYMPTOMS:
+- [Symptom 1]
+- [Symptom 2]
+
+ENVIRONMENT:
+- [System details]
+- [Version information]
+
+STEPS ALREADY TRIED:
+1. [Step] - Result: [outcome]
+2. [Step] - Result: [outcome]
+
+DIAGNOSTIC APPROACH:
+1. List possible root causes (most to least likely)
+2. For each, provide diagnostic steps
+3. Include verification tests
+4. Suggest fixes with rollback procedures
+```
+
+### Template: Documentation Generator
+```
+Create documentation for [topic/code/system].
+
+AUDIENCE: [who will read this]
+EXPERTISE LEVEL: [beginner/intermediate/advanced]
+
+SECTIONS TO INCLUDE:
+1. Overview (2-3 sentences)
+2. Prerequisites
+3. Step-by-step instructions
+4. Code examples
+5. Common issues and solutions
+6. Related resources
+
+STYLE: [concise/detailed/tutorial/reference]
+```
+
+
+---
+
+## 🧪 Testing Your Enhanced Prompts
+
+### The Quality Rubric
+
+Score your enhanced prompt (1-5) on:
+
+| Criteria | 1 (Poor) | 3 (Good) | 5 (Excellent) |
+|----------|----------|----------|---------------|
+| **Specificity** | Vague, open-ended | Some details | Precise, measurable |
+| **Context** | Missing key info | Adequate background | Comprehensive setup |
+| **Structure** | Disorganized | Logical flow | Perfectly structured |
+| **Examples** | None provided | One example | Multiple, diverse examples |
+| **Constraints** | No boundaries | Some limits | Clear boundaries & criteria |
+| **Actionability** | Unclear next steps | Basic guidance | Detailed, executable steps |
+
+**Target Score: 20+ out of 30**
+
+### Iterative Improvement Process
+
+```
+ITERATION 1: Draft the prompt
+↓
+TEST: Run with sample input
+↓
+EVALUATE: Did it meet expectations?
+↓
+IDENTIFY: What's missing/wrong?
+↓
+ENHANCE: Add clarity/context/examples
+↓
+REPEAT until satisfied
+```
+
+---
+
+## 🎓 Best Practices Summary
+
+### The Golden Rules
+
+1. **Be Explicit**: State what you want clearly. Don't assume understanding.
+2. **Provide Context**: The more relevant context, the better the output.
+3. **Use Structure**: Formatting guides the AI's response structure.
+4. **Show, Don't Just Tell**: Examples are worth a thousand words.
+5. **Set Boundaries**: Constraints focus creativity and prevent drift.
+6. **Iterate**: First draft is rarely perfect. Refine based on results.
+
+### Common Mistakes to Avoid
+
+| ❌ Don't | ✅ Do Instead |
+|----------|---------------|
+| "Make this good" | "Improve readability by using active voice and varying sentence length" |
+| "Write about X" | "Write a 500-word blog post about X targeting beginners" |
+| "Fix this code" | "Debug this Python function to handle None values and add error handling" |
+| "What do you think?" | "Analyze this proposal's strengths and weaknesses using a SWOT framework" |
+| Long, unstructured paragraphs | Clear sections with headers and bullet points |
+
+### The Enhancement Mindset
+
+> **"A prompt is not a question - it's a specification document for a deliverable."**
+
+Think of prompting as:
+- **Delegating to an expert**: Give them everything they need to succeed
+- **Writing a brief**: Clear requirements lead to better results
+- **Programming in natural language**: Structure matters as much as content
+
+---
+
+## 📖 Example Transformations
+
+### Before & After: Code Review
+
+**BEFORE:**
+```
+Review this code
+```
+
+**AFTER:**
+```
+You are a senior Python engineer conducting a code review.
+
+CODE TO REVIEW:
+```python
+[paste code]
+```
+
+REVIEW CHECKLIST:
+- [ ] PEP 8 compliance
+- [ ] Type hint coverage
+- [ ] Error handling completeness
+- [ ] Test coverage adequacy
+- [ ] Performance considerations
+
+OUTPUT FORMAT:
+For each issue found:
+**Line X**: [Issue type] - [Description]
+**Suggestion**: [How to fix]
+**Code**: ```python [Improved code] ```
+
+PRIORITIZE: Security > Performance > Maintainability
+```
+
+---
+
+### Before & After: Content Creation
+
+**BEFORE:**
+```
+Write about climate change
+```
+
+**AFTER:**
+```
+You are an environmental science communicator writing for a general audience.
+
+TOPIC: Climate change impacts on coastal communities
+
+TARGET READER:
+- Age: 25-45
+- Education: College-educated
+- Concern level: Moderate (wants to understand but not overwhelmed)
+
+APPROACH:
+- Start with relatable hook
+- Use one concrete example (Miami or similar)
+- Explain 3 key impacts with data
+- End with actionable steps
+
+TONE: Informative but hopeful, not alarmist
+
+LENGTH: 600-800 words
+
+STRUCTURE:
+1. Hook/Opening (100 words)
+2. The local reality (200 words)
+3. Three impacts (300 words)
+4. What can be done (150 words)
+5. Closing (50 words)
+
+AVOID: Jargon without explanation, political blame, doom-mongering
+```
+
+---
+
+### Before & After: Data Analysis
+
+**BEFORE:**
+```
+Analyze this data
+```
+
+**AFTER:**
+```
+You are a data analyst helping a retail business understand customer behavior.
+
+DATASET: Customer purchase history (CSV, 50K rows)
+KEY COLUMNS: customer_id, purchase_date, amount, category, region
+
+ANALYSIS OBJECTIVES:
+1. Identify top 3 customer segments by value
+2. Find seasonal trends in purchasing
+3. Detect any anomalies in recent months
+4. Recommend 3 data-driven actions
+
+DELIVERABLES:
+1. Executive Summary (3-4 bullet points)
+2. Detailed Findings (with supporting statistics)
+3. Visual Recommendations (describe what charts to create)
+4. Action Plan (prioritized recommendations)
+
+CONSTRAINTS:
+- Focus on insights actionable by marketing team
+- Flag any data quality issues noticed
+- Consider only last 24 months of data
+
+OUTPUT FORMAT:
+Use markdown with clear headers. Include SQL/Python code snippets where helpful.
+```
+
+---
+
+## 🚀 Quick Reference Card
+
+### The Enhancement Formula
+
+```
+[ROLE] + [CONTEXT] + [TASK] + [FORMAT] + [CONSTRAINTS] + [EXAMPLES] = 🎯
+```
+
+### One-Liner Boosters
+
+Add these phrases for instant improvement:
+
+- "Think step by step"
+- "Provide specific examples"
+- "Consider edge cases"
+- "Explain your reasoning"
+- "Format as [table/list/markdown]"
+- "Prioritize by [criteria]"
+- "Include alternatives"
+- "Highlight key assumptions"
+
+### Emergency Templates
+
+**No time? Use these:**
+
+```
+# Quick Code Help
+"You are an expert [language] developer. [Task]. Provide code with comments explaining key decisions."
+
+# Quick Writing
+"Write [content type] about [topic] for [audience]. Use [tone]. Length: [X] words. Include: [key points]."
+
+# Quick Analysis
+"Analyze [subject] focusing on [aspects]. Structure: 1) Summary 2) Key findings 3) Recommendations."
+
+# Quick Debugging
+"Debug this [language] code. Error: [error]. Code: [code]. Explain the cause and provide the fix."
+```
+
+---
+
+## 🌟 Final Thoughts
+
+> **"The quality of your output is directly proportional to the quality of your input."**
+
+Prompt enhancement is not about manipulation - it's about **clarity**. A well-crafted prompt:
+- Respects the AI's capabilities by giving it proper context
+- Respects your time by reducing back-and-forth
+- Respects the task by being thorough and precise
+
+**Remember:**
+- ✅ Start with the frameworks, then adapt to your style
+- ✅ Test and iterate - every prompt can be improved
+- ✅ Keep a library of your best prompts
+- ✅ Share what works with your team
+- ✅ Stay curious and keep learning
+
+---
+
+## 📚 Resources & References
+
+### Prompt Patterns Collection
+- Chain-of-Thought (Wei et al., 2022)
+- Few-Shot Learning (Brown et al., 2020)
+- ReAct: Reasoning + Acting (Yao et al., 2022)
+- Self-Consistency (Wang et al., 2022)
+
+### Recommended Reading
+- "The Art of Prompt Engineering" by various authors
+- OpenAI's prompt engineering guide
+- Anthropic's Claude best practices
+- Google's Gemini prompting guidelines
+
+---
+
+*Last Updated: 2024*  
+*Version: 1.0 - Comprehensive Edition*
+
+**Happy Prompting! 🎯✨**

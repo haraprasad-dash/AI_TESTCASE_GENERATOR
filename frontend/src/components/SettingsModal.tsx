@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   X, Check, AlertCircle, Link2, Server, 
   Cloud, Key, Globe, Lock, Save, Loader2,
@@ -16,6 +16,13 @@ interface Props {
 export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const settings = useSettingsStore();
   const [activeTab, setActiveTab] = useState<'jira' | 'valueedge' | 'llm'>('jira');
+  const [preserveSecrets, setPreserveSecrets] = useState({
+    jiraApiToken: false,
+    valueEdgeClientSecret: false,
+    groqApiKey: false,
+  });
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [testing, setTesting] = useState<{ jira: boolean; valueedge: boolean }>({
     jira: false,
     valueedge: false,
@@ -28,13 +35,80 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     valueedge: 'idle',
   });
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!isOpen) {
+        return;
+      }
+
+      setLoadingSettings(true);
+      try {
+        const res = await api.getSettings();
+        const remote = res.data;
+        const isMasked = (value?: string | null) => {
+          if (!value) return false;
+          return /^\*+$/.test(value.trim());
+        };
+
+        const jiraMasked = isMasked(remote?.jira?.api_token);
+        const valueEdgeMasked = isMasked(remote?.valueedge?.client_secret);
+        const groqMasked = isMasked(remote?.llm?.groq?.api_key);
+
+        setPreserveSecrets({
+          jiraApiToken: jiraMasked,
+          valueEdgeClientSecret: valueEdgeMasked,
+          groqApiKey: groqMasked,
+        });
+
+        settings.setAll({
+          jira: {
+            enabled: Boolean(remote?.jira?.enabled),
+            baseUrl: remote?.jira?.base_url || '',
+            username: remote?.jira?.username || '',
+            apiToken: jiraMasked ? '' : (remote?.jira?.api_token || ''),
+            defaultProject: remote?.jira?.default_project || undefined,
+          },
+          valueedge: {
+            enabled: Boolean(remote?.valueedge?.enabled),
+            baseUrl: remote?.valueedge?.base_url || '',
+            clientId: remote?.valueedge?.client_id || '',
+            clientSecret: valueEdgeMasked ? '' : (remote?.valueedge?.client_secret || ''),
+            sharedSpaceId: remote?.valueedge?.shared_space_id || undefined,
+          },
+          llm: {
+            defaultProvider: remote?.llm?.default_provider || 'groq',
+            groq: {
+              apiKey: groqMasked ? '' : (remote?.llm?.groq?.api_key || ''),
+              defaultModel: remote?.llm?.groq?.default_model || 'llama-3.3-70b-versatile',
+              defaultTemperature: remote?.llm?.groq?.default_temperature ?? 0.2,
+            },
+            ollama: {
+              baseUrl: remote?.llm?.ollama?.base_url || 'http://localhost:11434',
+              defaultModel: remote?.llm?.ollama?.default_model || 'llama3.1',
+            },
+          },
+        });
+      } catch {
+        toast.error('Failed to load settings from backend');
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+
+    loadSettings();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const testJiraConnection = async () => {
     setTesting(prev => ({ ...prev, jira: true }));
     setTestStatus(prev => ({ ...prev, jira: 'idle' }));
     try {
-      await api.testJiraConnection();
+      await api.testJiraConnection({
+        baseUrl: settings.jira.baseUrl,
+        username: settings.jira.username,
+        apiToken: settings.jira.apiToken,
+      });
       setTestStatus(prev => ({ ...prev, jira: 'success' }));
       toast.success('JIRA connection successful!');
     } catch (error: any) {
@@ -52,7 +126,11 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     setTesting(prev => ({ ...prev, valueedge: true }));
     setTestStatus(prev => ({ ...prev, valueedge: 'idle' }));
     try {
-      await api.testValueEdgeConnection();
+      await api.testValueEdgeConnection({
+        baseUrl: settings.valueedge.baseUrl,
+        clientId: settings.valueedge.clientId,
+        clientSecret: settings.valueedge.clientSecret,
+      });
       setTestStatus(prev => ({ ...prev, valueedge: 'success' }));
       toast.success('ValueEdge connection successful!');
     } catch (error: any) {
@@ -63,6 +141,41 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
       toast.error(message);
     } finally {
       setTesting(prev => ({ ...prev, valueedge: false }));
+    }
+  };
+
+  const handleSave = async () => {
+    setSavingSettings(true);
+    try {
+      await api.updateSettings({
+        jira: {
+          ...settings.jira,
+          apiToken: preserveSecrets.jiraApiToken && !settings.jira.apiToken
+            ? '***'
+            : settings.jira.apiToken.trim(),
+        },
+        valueedge: {
+          ...settings.valueedge,
+          clientSecret: preserveSecrets.valueEdgeClientSecret && !settings.valueedge.clientSecret
+            ? '***'
+            : settings.valueedge.clientSecret.trim(),
+        },
+        llm: {
+          ...settings.llm,
+          groq: {
+            ...settings.llm.groq,
+            apiKey: preserveSecrets.groqApiKey && !settings.llm.groq.apiKey
+              ? '***'
+              : settings.llm.groq.apiKey.trim(),
+          },
+        },
+      });
+      toast.success('Settings saved');
+      onClose();
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -129,6 +242,13 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
           {/* Content */}
           <div className="flex-1 p-6 overflow-y-auto">
+            {loadingSettings ? (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Loading settings...</span>
+              </div>
+            ) : (
+              <>
             {activeTab === 'jira' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex items-center gap-2 mb-4">
@@ -172,7 +292,10 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   <input
                     type="password"
                     value={settings.jira.apiToken}
-                    onChange={(e) => settings.updateJira({ apiToken: e.target.value })}
+                    onChange={(e) => {
+                      setPreserveSecrets((prev) => ({ ...prev, jiraApiToken: false }));
+                      settings.updateJira({ apiToken: e.target.value });
+                    }}
                     placeholder="••••••••••••••••••••"
                     className="input-field"
                   />
@@ -258,7 +381,10 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   <input
                     type="password"
                     value={settings.valueedge.clientSecret}
-                    onChange={(e) => settings.updateValueEdge({ clientSecret: e.target.value })}
+                    onChange={(e) => {
+                      setPreserveSecrets((prev) => ({ ...prev, valueEdgeClientSecret: false }));
+                      settings.updateValueEdge({ clientSecret: e.target.value });
+                    }}
                     className="input-field"
                   />
                 </div>
@@ -307,14 +433,20 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   <input
                     type="password"
                     value={settings.llm.groq.apiKey}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setPreserveSecrets((prev) => ({ ...prev, groqApiKey: false }));
                       settings.updateLLM({
                         groq: { ...settings.llm.groq, apiKey: e.target.value },
-                      })
-                    }
-                    placeholder="gsk_..."
+                      });
+                    }}
+                    placeholder={preserveSecrets.groqApiKey ? 'Saved key is hidden. Type to replace it.' : 'gsk_...'}
                     className="input-field"
                   />
+                  {preserveSecrets.groqApiKey && !settings.llm.groq.apiKey && (
+                    <p className="text-xs text-emerald-700 mt-2">
+                      A Groq API key is already saved and will continue to be used.
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 mt-2">
                     Get from:{' '}
                     <a
@@ -351,18 +483,21 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
               </div>
             )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
           <button 
-            onClick={onClose} 
+            onClick={handleSave}
+            disabled={savingSettings || loadingSettings}
             type="button"
             className="btn-secondary"
           >
-            <Save className="w-4 h-4" />
-            Save & Close
+            {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {savingSettings ? 'Saving...' : 'Save & Close'}
           </button>
         </div>
       </div>

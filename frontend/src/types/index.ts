@@ -46,9 +46,15 @@ export interface FileInput {
 
 export interface GenerationInputs {
   jira_id?: string;
+  jira_ids?: string[];
   valueedge_id?: string;
+  valueedge_ids?: string[];
   files: FileInput[];
   custom_prompt?: string;
+  test_plan_prompt?: string;
+  test_case_prompt?: string;
+  use_test_plan_template?: boolean;
+  use_test_case_template?: boolean;
 }
 
 export interface GenerationConfiguration {
@@ -94,4 +100,47 @@ export interface ExportRequest {
   format: 'markdown' | 'pdf' | 'excel' | 'json' | 'gherkin';
   test_plan?: string;
   test_cases?: string;
+}
+
+export interface ClarificationEntry {
+  questions: string[];
+  answer: string;
+}
+
+export interface ReviewInputs {
+  jira_id?: string;
+  jira_ids?: string[];
+  valueedge_id?: string;
+  valueedge_ids?: string[];
+  files: FileInput[];
+  custom_instructions?: string;
+  review_test_cases?: boolean;
+  review_user_guide?: boolean;
+  user_guide_url?: string;
+  clarification_history?: ClarificationEntry[];
+}
+
+export interface ReviewConfiguration {
+  provider: 'groq' | 'ollama';
+  model?: string;
+  temperature: number;
+}
+
+export interface ReviewResponse {
+  review_id: string;
+  status: 'completed' | 'clarification_required' | 'failed';
+  timestamp: string;
+  report_markdown: string;
+  report_json: Record<string, unknown>;
+  partial_results?: Record<string, unknown>;
+  metadata: {
+    review_type: 'test-cases' | 'user-guide' | 'both';
+    clarification_required: boolean;
+    clarification_questions: string[];
+    clarification_round: number;
+    max_clarification_rounds: number;
+    assumptions_applied: boolean;
+    sources: string[];
+  };
+  error?: string;
 }

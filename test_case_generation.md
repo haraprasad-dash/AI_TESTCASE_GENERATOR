@@ -1,13 +1,8 @@
-# Test Case Generation Prompts
-
-- **Author:** Pramod Dutta
-- **Role:** Principal SDET
-- **Website:** [The Testing Academy](https://thetestingacademy.com/)
-- **LinkedIn:** [linkedin.com/in/pramoddutta](https://www.linkedin.com/in/pramoddutta/)
+# Test Case Generation Prompts (BDD-First)
 
 ---
 
-**Purpose:** Ready-to-use prompt templates for test case generation
+**Purpose:** Ready-to-use prompt templates for BDD/Gherkin test case generation
 **Chapter:** 2 - Prompt Engineering
 
 ---
@@ -23,9 +18,11 @@ CONSTRAINTS:
 - Use ONLY the provided requirements
 - Do NOT assume undocumented behavior
 - If information is missing, state "Not specified"
+- Output MUST be BDD/Gherkin only
+- Do NOT use markdown tables
 
 FORMAT:
-| Test ID | Description | Pre-conditions | Steps | Expected Result | Priority |
+Feature + Background + Scenario / Scenario Outline with Examples
 
 REQUIREMENTS:
 [PASTE REQUIREMENTS HERE]
@@ -188,10 +185,4 @@ MODULE DOCUMENTATION:
 | Quick test cases | Template 1 |
 
 ---
-
-## See Also
-
-- [Bug Report Prompts](ch_02_bug_report_prompts.md)
-- [API Testing Prompts](ch_02_api_testing_prompts.md)
-- [Few-Shot Prompting](../techniques/ch_02_few_shot_prompting.md)
 

@@ -5,7 +5,10 @@ import type {
   GenerationInputs,
   GenerationConfiguration,
   GenerationResponse,
-  ExportRequest
+  ExportRequest,
+  ReviewInputs,
+  ReviewConfiguration,
+  ReviewResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -28,8 +31,12 @@ class ApiService {
   }
 
   // JIRA
-  async testJiraConnection() {
-    return this.client.post('/api/jira/test-connection', null, { timeout: 15000 });
+  async testJiraConnection(config?: { baseUrl: string; username: string; apiToken: string }) {
+    return this.client.post('/api/jira/test-connection', config ? {
+      base_url: config.baseUrl,
+      username: config.username,
+      api_token: config.apiToken,
+    } : null, { timeout: 15000 });
   }
 
   async getJiraIssue(issueKey: string) {
@@ -37,8 +44,12 @@ class ApiService {
   }
 
   // ValueEdge
-  async testValueEdgeConnection() {
-    return this.client.post('/api/valueedge/test-connection', null, { timeout: 15000 });
+  async testValueEdgeConnection(config?: { baseUrl: string; clientId: string; clientSecret: string }) {
+    return this.client.post('/api/valueedge/test-connection', config ? {
+      base_url: config.baseUrl,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+    } : null, { timeout: 15000 });
   }
 
   async getValueEdgeItem(itemId: string) {
@@ -108,13 +119,81 @@ class ApiService {
     return this.client.post(`/api/export/${requestId}`, request);
   }
 
+  // Review
+  async reviewTestCases(inputs: ReviewInputs, configuration: ReviewConfiguration) {
+    return this.client.post<ReviewResponse>('/api/review/test-cases', { inputs, configuration });
+  }
+
+  async reviewUserGuide(inputs: ReviewInputs, configuration: ReviewConfiguration) {
+    return this.client.post<ReviewResponse>('/api/review/user-guide', { inputs, configuration });
+  }
+
+  async reviewBoth(inputs: ReviewInputs, configuration: ReviewConfiguration) {
+    return this.client.post<ReviewResponse>('/api/review/both', { inputs, configuration });
+  }
+
+  async reviewStatus(reviewId: string) {
+    return this.client.get<ReviewResponse>(`/api/review/${reviewId}/status`);
+  }
+
+  async attachReviewClarificationFile(reviewId: string, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.client.post(`/api/review/clarification/${reviewId}/attach`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  }
+
+  async exportReview(reviewId: string, format: 'markdown' | 'pdf' | 'excel' | 'json' | 'gherkin') {
+    return this.client.post(`/api/review/${reviewId}/export`, { format });
+  }
+
   // Settings
   async getSettings() {
-    return this.client.get<Settings>('/api/settings');
+    // Backend returns snake_case keys; the modal maps them into camelCase store fields.
+    return this.client.get<any>('/api/settings');
   }
 
   async updateSettings(settings: Settings) {
-    return this.client.put('/api/settings', settings);
+    const payload = {
+      jira: {
+        enabled: settings.jira.enabled,
+        base_url: settings.jira.baseUrl,
+        username: settings.jira.username,
+        api_token: settings.jira.apiToken,
+        default_project: settings.jira.defaultProject,
+      },
+      valueedge: {
+        enabled: settings.valueedge.enabled,
+        base_url: settings.valueedge.baseUrl,
+        client_id: settings.valueedge.clientId,
+        client_secret: settings.valueedge.clientSecret,
+        shared_space_id: settings.valueedge.sharedSpaceId,
+      },
+      llm: {
+        default_provider: settings.llm.defaultProvider,
+        groq: {
+          api_key: settings.llm.groq.apiKey,
+          default_model: settings.llm.groq.defaultModel,
+          default_temperature: settings.llm.groq.defaultTemperature,
+        },
+        ollama: {
+          base_url: settings.llm.ollama.baseUrl,
+          default_model: settings.llm.ollama.defaultModel,
+        },
+      },
+      templates: {
+        test_plan_path: './templates/test_plan_generation.md',
+        test_case_path: './templates/test_case_generation.md',
+      },
+      export: {
+        default_format: 'markdown',
+        auto_save: true,
+        output_directory: './outputs',
+      },
+    };
+
+    return this.client.put('/api/settings', payload);
   }
 }
 

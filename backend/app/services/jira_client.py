@@ -2,6 +2,7 @@
 JIRA API Client for fetching issue details.
 """
 import base64
+import json
 import httpx
 from typing import Optional, Dict, Any, List
 from app.models import JiraConfig
@@ -91,7 +92,8 @@ class JiraClient:
         
         try:
             response = await self._client.get(
-                f"{self.base_url}/rest/api/3/issue/{issue_key}"
+                f"{self.base_url}/rest/api/3/issue/{issue_key}",
+                params={"expand": "names"},
             )
             
             if response.status_code == 404:
@@ -129,7 +131,73 @@ class JiraClient:
             "reporter": fields.get("reporter", {}).get("displayName") if fields.get("reporter") else None,
             "created": fields.get("created"),
             "updated": fields.get("updated"),
+            "additional_details": self._extract_additional_details(issue_data),
         }
+
+    def _extract_additional_details(self, issue_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract all non-core JIRA fields in a normalized, backward-compatible shape."""
+        fields = issue_data.get("fields", {})
+        field_names = issue_data.get("names", {}) if isinstance(issue_data.get("names"), dict) else {}
+        core_fields = {
+            "summary",
+            "description",
+            "issuetype",
+            "priority",
+            "labels",
+            "components",
+            "status",
+            "assignee",
+            "reporter",
+            "created",
+            "updated",
+        }
+
+        additional: Dict[str, Any] = {}
+        for field_key, raw_value in fields.items():
+            if field_key in core_fields:
+                continue
+
+            normalized_value = self._normalize_field_value(raw_value)
+            if normalized_value in (None, "", [], {}):
+                continue
+
+            additional[field_key] = {
+                "name": field_names.get(field_key, field_key),
+                "value": normalized_value,
+            }
+
+        return additional
+
+    def _normalize_field_value(self, value: Any) -> Any:
+        """Normalize JIRA field values into JSON-serializable structures."""
+        if value is None:
+            return None
+
+        if isinstance(value, (str, int, float, bool)):
+            return value
+
+        if isinstance(value, list):
+            normalized_items = [self._normalize_field_value(item) for item in value]
+            return [item for item in normalized_items if item not in (None, "", [], {})]
+
+        if isinstance(value, dict):
+            if value.get("type") == "doc" and "content" in value:
+                return self._extract_text_from_adf(value)
+
+            normalized_dict: Dict[str, Any] = {}
+            for key, nested_value in value.items():
+                if key in {"self", "avatarUrls", "iconUrl"}:
+                    continue
+                normalized_nested = self._normalize_field_value(nested_value)
+                if normalized_nested not in (None, "", [], {}):
+                    normalized_dict[key] = normalized_nested
+            return normalized_dict
+
+        try:
+            json.dumps(value)
+            return value
+        except TypeError:
+            return str(value)
     
     def _extract_description(self, description: Any) -> str:
         """Extract text from Atlassian Document Format."""

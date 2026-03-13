@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import jira, valueedge, documents, llm, generation, settings, export
+from app.routers import jira, valueedge, documents, llm, generation, settings, export, review
 
 
 @asynccontextmanager
@@ -45,6 +45,7 @@ app.include_router(llm.router)
 app.include_router(generation.router)
 app.include_router(settings.router)
 app.include_router(export.router)
+app.include_router(review.router)
 
 
 @app.get("/api/health")

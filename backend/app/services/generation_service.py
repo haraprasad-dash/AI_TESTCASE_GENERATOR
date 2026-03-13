@@ -4,6 +4,7 @@ Generation Service - Orchestrates test plan and test case generation.
 import uuid
 import time
 import re
+import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any, List, AsyncIterator
 from pathlib import Path
@@ -52,6 +53,9 @@ class GenerationService:
         start_time = time.time()
         
         try:
+            plan_prompt = self._resolve_section_prompt(inputs.test_plan_prompt, inputs.custom_prompt)
+            case_prompt = self._resolve_section_prompt(inputs.test_case_prompt, inputs.custom_prompt)
+
             # Step 1: Assemble context
             if websocket_callback:
                 await websocket_callback({"step": "assembling", "percent": 10})
@@ -60,9 +64,11 @@ class GenerationService:
             sources = self._identify_sources(inputs)
 
             # Keep prompts within provider limits (especially Groq TPM limits).
-            context = self._apply_context_budget(context, config.provider, config.model or "")
+            if context.strip():
+                context = self._apply_context_budget(context, config.provider, config.model or "")
             
-            if not context.strip():
+            has_custom_instructions = bool(plan_prompt or case_prompt)
+            if not context.strip() and not has_custom_instructions:
                 raise ContextAssemblyError("No content found in inputs")
             
             # Step 2: Initialize LLM orchestrator
@@ -92,30 +98,35 @@ class GenerationService:
             if websocket_callback:
                 await websocket_callback({"step": "generating_plan", "percent": 30})
             
-            test_plan = await self._generate_test_plan(orchestrator, context, inputs.custom_prompt)
+            test_plan = await self._generate_test_plan(
+                orchestrator,
+                context,
+                plan_prompt,
+                inputs.use_test_plan_template,
+            )
             
             # Step 4: Generate test cases
             if websocket_callback:
                 await websocket_callback({"step": "generating_cases", "percent": 60})
             
-            test_cases = await self._generate_test_cases(orchestrator, context, inputs.custom_prompt)
+            test_cases = await self._generate_test_cases(
+                orchestrator,
+                context,
+                case_prompt,
+                inputs.use_test_case_template,
+            )
 
             combined_output = f"{test_plan.content}\n\n{test_cases.content}"
             clarification_questions = self._extract_clarification_questions(combined_output)
+            clarification_prompt = self._merge_prompts(plan_prompt, case_prompt, inputs.custom_prompt)
             clarification_required = self._should_require_clarification(
-                inputs.custom_prompt,
+                clarification_prompt,
                 test_plan.content,
                 test_cases.content,
                 clarification_questions,
             )
             if clarification_required and not clarification_questions:
-                clarification_questions = [
-                    "What exact purge rule fields are mandatory on the configuration screen?",
-                    "What are valid ranges/formats for retention and schedule inputs?",
-                    "What are role/permission rules for create/edit/execute purge actions?",
-                    "What confirmations, warnings, or audit/logging behaviors are expected?",
-                    "Which negative and boundary behaviors from the snapshots must be prioritized?",
-                ]
+                clarification_questions = self._default_clarification_questions(clarification_prompt)
             
             # Step 5: Build response
             if websocket_callback:
@@ -157,23 +168,20 @@ class GenerationService:
             # Return deterministic artifacts instead of an empty/failed result.
             if config.provider == "ollama":
                 try:
-                    bdd_mode = self._is_bdd_requested(inputs.custom_prompt)
-                    fallback_plan = self._build_fallback_test_plan(context, inputs.custom_prompt)
+                    plan_prompt = self._resolve_section_prompt(inputs.test_plan_prompt, inputs.custom_prompt)
+                    case_prompt = self._resolve_section_prompt(inputs.test_case_prompt, inputs.custom_prompt)
+                    bdd_mode = self._is_bdd_requested(case_prompt)
+                    fallback_plan = self._build_fallback_test_plan(context, plan_prompt)
                     if bdd_mode:
                         fallback_cases = self._ensure_gherkin_fence(
-                            self._build_fallback_bdd_test_cases(context, inputs.custom_prompt)
+                            self._build_fallback_bdd_test_cases(context, case_prompt)
                         )
                     else:
-                        fallback_cases = self._build_fallback_table_test_cases(context, inputs.custom_prompt)
+                        fallback_cases = self._build_fallback_table_test_cases(context, case_prompt)
 
-                    clarification_required = self._explicitly_requests_clarification_first(inputs.custom_prompt)
-                    clarification_questions = [
-                        "What exact purge rule fields are mandatory on the configuration screen?",
-                        "What are valid ranges/formats for retention and schedule inputs?",
-                        "What are role/permission rules for create/edit/execute purge actions?",
-                        "What confirmations, warnings, or audit/logging behaviors are expected?",
-                        "Which negative and boundary behaviors from the snapshots must be prioritized?",
-                    ] if clarification_required else []
+                    clarification_prompt = self._merge_prompts(plan_prompt, case_prompt, inputs.custom_prompt)
+                    clarification_required = self._explicitly_requests_clarification_first(clarification_prompt)
+                    clarification_questions = self._default_clarification_questions(clarification_prompt) if clarification_required else []
 
                     total_time = int((time.time() - start_time) * 1000)
                     return GenerationResponse(
@@ -213,36 +221,36 @@ class GenerationService:
                 try:
                     from app.config import get_settings
                     settings = get_settings()
-                    retry_specs: List[Dict[str, Any]] = []
+                    retry_specs = self._build_groq_retry_specs(
+                        error_message=str(e),
+                        requested_model=config.model,
+                        ollama_default_model=settings.ollama_default_model,
+                    )
 
-                    # 1) Retry same model with smaller completion budget if remaining quota is low.
-                    remaining = self._extract_remaining_groq_tokens(str(e))
-                    if remaining and remaining >= 280:
-                        retry_specs.append({
+                    # Quality-preserving behavior: if immediate retry is not possible,
+                    # wait and retry once on the same selected model (no model switch).
+                    if not retry_specs and self._is_rate_limit_error(str(e)):
+                        wait_seconds = self._rate_limit_backoff_seconds(str(e))
+                        await asyncio.sleep(wait_seconds)
+                        retry_specs = [{
                             "provider": "groq",
                             "model": config.model or "llama-3.3-70b-versatile",
-                            "max_tokens": max(256, min(remaining - 120, 900)),
-                        })
+                            "max_tokens": 256,
+                        }]
 
-                    # 2) Retry alternate Groq models that may have different limits/availability.
-                    for fallback_model in [
-                        "llama-3.3-70b-versatile",
-                        "llama-3.1-70b-versatile",
-                        "mixtral-8x7b-32768",
-                    ]:
-                        if fallback_model != (config.model or ""):
-                            retry_specs.append({
-                                "provider": "groq",
-                                "model": fallback_model,
-                                "max_tokens": 700,
-                            })
-
-                    # 3) Last resort: local Ollama fallback if available.
-                    retry_specs.append({
-                        "provider": "ollama",
-                        "model": settings.ollama_default_model,
-                        "max_tokens": 700,
-                    })
+                    if not retry_specs:
+                        return GenerationResponse(
+                            request_id=request_id,
+                            status="failed",
+                            timestamp=datetime.utcnow(),
+                            outputs=GenerationOutputs(),
+                            metadata=GenerationMetadata(
+                                model_used=config.model or "unknown",
+                                temperature=config.temperature,
+                                sources=self._identify_sources(inputs)
+                            ),
+                            error=self._friendly_generation_error(str(e), config.provider, config.model or "")
+                        )
 
                     for spec in retry_specs:
                         try:
@@ -255,8 +263,20 @@ class GenerationService:
                             )
                             fallback_orchestrator.config.max_tokens = spec["max_tokens"]
 
-                            test_plan = await self._generate_test_plan(fallback_orchestrator, context, inputs.custom_prompt)
-                            test_cases = await self._generate_test_cases(fallback_orchestrator, context, inputs.custom_prompt)
+                            plan_prompt = self._resolve_section_prompt(inputs.test_plan_prompt, inputs.custom_prompt)
+                            case_prompt = self._resolve_section_prompt(inputs.test_case_prompt, inputs.custom_prompt)
+                            test_plan = await self._generate_test_plan(
+                                fallback_orchestrator,
+                                context,
+                                plan_prompt,
+                                inputs.use_test_plan_template,
+                            )
+                            test_cases = await self._generate_test_cases(
+                                fallback_orchestrator,
+                                context,
+                                case_prompt,
+                                inputs.use_test_case_template,
+                            )
 
                             combined_output = f"{test_plan.content}\n\n{test_cases.content}"
                             clarification_questions = self._extract_clarification_questions(combined_output)
@@ -267,13 +287,7 @@ class GenerationService:
                                 clarification_questions,
                             )
                             if clarification_required and not clarification_questions:
-                                clarification_questions = [
-                                    "What exact purge rule fields are mandatory on the configuration screen?",
-                                    "What are valid ranges/formats for retention and schedule inputs?",
-                                    "What are role/permission rules for create/edit/execute purge actions?",
-                                    "What confirmations, warnings, or audit/logging behaviors are expected?",
-                                    "Which negative and boundary behaviors from the snapshots must be prioritized?",
-                                ]
+                                clarification_questions = self._default_clarification_questions(inputs.custom_prompt)
                             total_time = int((time.time() - start_time) * 1000)
 
                             return GenerationResponse(
@@ -344,33 +358,37 @@ class GenerationService:
         
         context_parts = []
         settings = get_settings()
+        jira_ids = self._collect_ticket_ids(inputs.jira_id, getattr(inputs, "jira_ids", []))
+        valueedge_ids = self._collect_ticket_ids(inputs.valueedge_id, getattr(inputs, "valueedge_ids", []))
         
         # Fetch JIRA content
-        if inputs.jira_id and settings.jira_base_url:
-            try:
-                jira_config = type('Config', (), {
-                    'base_url': settings.jira_base_url,
-                    'username': settings.jira_username,
-                    'api_token': settings.jira_api_token
-                })()
-                issue_data = await fetch_jira_issue(inputs.jira_id, jira_config)
-                context_parts.append(self._format_jira_context(issue_data))
-            except JiraClientError as e:
-                context_parts.append(f"<!-- JIRA fetch failed: {e} -->")
+        if jira_ids and settings.jira_base_url:
+            jira_config = type('Config', (), {
+                'base_url': settings.jira_base_url,
+                'username': settings.jira_username,
+                'api_token': settings.jira_api_token
+            })()
+            for jira_id in jira_ids:
+                try:
+                    issue_data = await fetch_jira_issue(jira_id, jira_config)
+                    context_parts.append(self._format_jira_context(issue_data))
+                except JiraClientError as e:
+                    context_parts.append(f"<!-- JIRA fetch failed for {jira_id}: {e} -->")
         
         # Fetch ValueEdge content
-        if inputs.valueedge_id and settings.valueedge_base_url:
-            try:
-                ve_config = type('Config', (), {
-                    'base_url': settings.valueedge_base_url,
-                    'client_id': settings.valueedge_client_id,
-                    'client_secret': settings.valueedge_client_secret,
-                    'shared_space_id': settings.valueedge_shared_space_id
-                })()
-                item_data = await fetch_valueedge_item(inputs.valueedge_id, ve_config)
-                context_parts.append(self._format_valueedge_context(item_data))
-            except ValueEdgeClientError as e:
-                context_parts.append(f"<!-- ValueEdge fetch failed: {e} -->")
+        if valueedge_ids and settings.valueedge_base_url:
+            ve_config = type('Config', (), {
+                'base_url': settings.valueedge_base_url,
+                'client_id': settings.valueedge_client_id,
+                'client_secret': settings.valueedge_client_secret,
+                'shared_space_id': settings.valueedge_shared_space_id
+            })()
+            for valueedge_id in valueedge_ids:
+                try:
+                    item_data = await fetch_valueedge_item(valueedge_id, ve_config)
+                    context_parts.append(self._format_valueedge_context(item_data))
+                except ValueEdgeClientError as e:
+                    context_parts.append(f"<!-- ValueEdge fetch failed for {valueedge_id}: {e} -->")
         
         # Add file content
         for file in inputs.files:
@@ -382,13 +400,34 @@ class GenerationService:
     def _identify_sources(self, inputs: GenerationInputs) -> List[str]:
         """Identify which sources were used."""
         sources = []
-        if inputs.jira_id:
+        if self._collect_ticket_ids(inputs.jira_id, getattr(inputs, "jira_ids", [])):
             sources.append("jira")
-        if inputs.valueedge_id:
+        if self._collect_ticket_ids(inputs.valueedge_id, getattr(inputs, "valueedge_ids", [])):
             sources.append("valueedge")
         if inputs.files:
             sources.append("files")
+        has_custom = any([
+            bool(inputs.custom_prompt and inputs.custom_prompt.strip()),
+            bool(inputs.test_plan_prompt and inputs.test_plan_prompt.strip()),
+            bool(inputs.test_case_prompt and inputs.test_case_prompt.strip()),
+        ])
+        if has_custom:
+            sources.append("custom_instructions")
         return sources
+
+    def _collect_ticket_ids(self, primary_id: Optional[str], additional_ids: Optional[List[str]]) -> List[str]:
+        """Collect ticket IDs from legacy single field + new list field, preserving order and uniqueness."""
+        collected: List[str] = []
+        if primary_id and primary_id.strip():
+            collected.append(primary_id.strip())
+
+        for ticket_id in additional_ids or []:
+            if ticket_id and str(ticket_id).strip():
+                normalized = str(ticket_id).strip()
+                if normalized not in collected:
+                    collected.append(normalized)
+
+        return collected
     
     def _format_jira_context(self, issue_data: Dict[str, Any]) -> str:
         """Format JIRA issue data as context."""
@@ -480,6 +519,86 @@ class GenerationService:
         remaining = limit - used
         return max(0, remaining)
 
+    def _extract_requested_groq_tokens(self, message: str) -> Optional[int]:
+        """Parse requested token count from Groq rate-limit error message."""
+        if not message:
+            return None
+        match = re.search(r'Requested\s+(\d+)', message, re.IGNORECASE)
+        if not match:
+            return None
+        return int(match.group(1))
+
+    def _rate_limit_backoff_seconds(self, message: str) -> int:
+        """Compute bounded backoff for same-model retry on Groq rate-limit.
+
+        This does not change model or quality constraints; it only waits and retries once.
+        """
+        remaining = self._extract_remaining_groq_tokens(message)
+        requested = self._extract_requested_groq_tokens(message)
+
+        if remaining is None:
+            return 20
+
+        if remaining <= 0:
+            return 60
+
+        if requested is None:
+            return 20
+
+        deficit = requested - remaining
+        if deficit <= 0:
+            return 10
+
+        # Conservative bounded wait window.
+        return max(15, min(60, int(deficit / 40)))
+
+    def _build_groq_retry_specs(
+        self,
+        error_message: str,
+        requested_model: Optional[str],
+        ollama_default_model: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Build Groq retry strategy.
+
+        Policy:
+        - Rate-limit errors: preserve explicit user-selected Groq model; retry only same model
+          with reduced max_tokens. Do not silently switch to another model.
+        - Decommissioned model errors: allow fallback to supported Groq models, then Ollama.
+        """
+        model = requested_model or "llama-3.3-70b-versatile"
+        specs: List[Dict[str, Any]] = []
+
+        if self._is_rate_limit_error(error_message):
+            remaining = self._extract_remaining_groq_tokens(error_message)
+            if remaining and remaining >= 280:
+                specs.append({
+                    "provider": "groq",
+                    "model": model,
+                    "max_tokens": max(256, min(remaining - 120, 900)),
+                })
+            return specs
+
+        if self._is_decommissioned_model_error(error_message):
+            for fallback_model in [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
+                "mixtral-8x7b-32768",
+            ]:
+                if fallback_model != model:
+                    specs.append({
+                        "provider": "groq",
+                        "model": fallback_model,
+                        "max_tokens": 700,
+                    })
+
+            specs.append({
+                "provider": "ollama",
+                "model": ollama_default_model or "llama3.1",
+                "max_tokens": 700,
+            })
+
+        return specs
+
     def _friendly_generation_error(self, raw_error: str, provider: str, model: str) -> str:
         """Return user-friendly actionable error text while preserving root cause context."""
         if provider == "groq" and self._is_rate_limit_error(raw_error):
@@ -529,10 +648,11 @@ class GenerationService:
         self,
         orchestrator: LLMOrchestrator,
         context: str,
-        custom_prompt: Optional[str]
+        custom_prompt: Optional[str],
+        include_template: bool,
     ) -> LLMResponse:
         """Generate test plan using LLM."""
-        prompt = self._build_test_plan_prompt(context, custom_prompt)
+        prompt = self._build_test_plan_prompt(context, custom_prompt, include_template)
 
         response = await orchestrator.generate(
             prompt=prompt,
@@ -566,17 +686,67 @@ class GenerationService:
         if self._is_weak_test_plan(response.content):
             response.content = self._build_fallback_test_plan(context, custom_prompt)
 
+        response.content = self._ensure_test_plan_source_reference(response.content, context)
+
         return response
+
+    def _ensure_test_plan_source_reference(self, content: str, context: str) -> str:
+        """Ensure Jira-grounded plans include an explicit Source Reference line."""
+        jira_key = self._extract_jira_issue_key(context)
+        jira_summary = self._extract_jira_summary(context)
+
+        if not jira_key and not jira_summary:
+            return content
+
+        lower_content = (content or "").lower()
+        if "source reference" in lower_content and (not jira_key or jira_key.lower() in lower_content):
+            return content
+
+        reference_bits = []
+        if jira_key:
+            reference_bits.append(f"JIRA: {jira_key}")
+        if jira_summary:
+            reference_bits.append(f"Summary: {jira_summary}")
+        reference_line = f"**Source Reference:** {' | '.join(reference_bits)}"
+
+        lines = (content or "").splitlines()
+        if not lines:
+            return reference_line
+
+        insert_at = 1
+        for idx, line in enumerate(lines):
+            stripped = line.strip().lower()
+            if stripped.startswith("## 1. introduction") or stripped.startswith("## introduction"):
+                insert_at = idx + 1
+                break
+
+        lines.insert(insert_at, reference_line)
+        return "\n".join(lines)
+
+    def _extract_jira_issue_key(self, context: str) -> Optional[str]:
+        """Extract Jira issue key from assembled context text."""
+        match = re.search(r"##\s*JIRA\s*Issue:\s*([A-Z][A-Z0-9]+-\d+)", context or "")
+        return match.group(1) if match else None
+
+    def _extract_jira_summary(self, context: str) -> Optional[str]:
+        """Extract Jira summary line from assembled context text."""
+        match = re.search(r"\*\*Summary:\*\*\s*(.+)", context or "")
+        if not match:
+            return None
+        summary = (match.group(1) or "").strip()
+        return summary[:200] if summary else None
     
     async def _generate_test_cases(
         self,
         orchestrator: LLMOrchestrator,
         context: str,
-        custom_prompt: Optional[str]
+        custom_prompt: Optional[str],
+        include_template: bool,
     ) -> LLMResponse:
         """Generate test cases using LLM."""
-        bdd_mode = self._is_bdd_requested(custom_prompt)
-        prompt = self._build_test_case_prompt(context, custom_prompt)
+        template_hint = self._resolve_test_case_template(include_template)
+        bdd_mode = self._is_bdd_requested(custom_prompt, template_hint)
+        prompt = self._build_test_case_prompt(context, custom_prompt, include_template)
 
         response = await orchestrator.generate(
             prompt=prompt,
@@ -617,6 +787,7 @@ class GenerationService:
                     "- At least 12 scenarios\n"
                     "- Include tags: @Functional, @Negative, @EdgeCase, @Acceptance, @E2E, @Exploratory\n"
                     "- Include at least 3 Scenario Outline cases with Examples\n"
+                    "- Include role/permission and data-integrity coverage\n"
                 )
             else:
                 quality_requirements += (
@@ -646,14 +817,16 @@ class GenerationService:
                 response.content = self._build_fallback_table_test_cases(context, custom_prompt)
         return response
     
-    def _build_test_plan_prompt(self, context: str, custom_prompt: Optional[str]) -> str:
+    def _build_test_plan_prompt(self, context: str, custom_prompt: Optional[str], include_template: bool = True) -> str:
         """Build test plan generation prompt."""
-        template_path = Path("./templates/test_plan_generation.md")
-        template = self._load_valid_template(
-            template_path=template_path,
-            fallback_template=self._default_test_plan_template(),
-            required_markers=["# test plan", "## 1. introduction", "## 2. test objectives"],
-        )
+        template = ""
+        if include_template:
+            template_path = Path("./templates/test_plan_generation.md")
+            template = self._load_valid_template(
+                template_path=template_path,
+                fallback_template=self._default_test_plan_template(),
+                required_markers=["# test plan", "## 1. introduction", "## 2. test objectives"],
+            )
 
         custom_instructions = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else None
 
@@ -665,6 +838,14 @@ class GenerationService:
             "",
             "If any conflict exists, follow CUSTOM INSTRUCTIONS.",
         ]
+
+        source_traceability = [
+            "# SOURCE TRACEABILITY (MANDATORY)",
+            "- In section 1 (Introduction), include a short 'Source Reference' line.",
+            "- If context contains a JIRA issue key, include that key exactly (e.g., SCRUM-5).",
+            "- If context contains a summary/title, include it in the Source Reference.",
+            "- Do not invent source identifiers not present in context.",
+        ]
         
         prompt_parts = [
             "\n".join(instruction_priority),
@@ -674,6 +855,8 @@ class GenerationService:
             "- Include clear sections, risks, entry/exit criteria, and coverage matrix.",
             "- If details are missing, proceed with explicit assumptions.",
             "",
+            "\n".join(source_traceability),
+            "",
             "# CUSTOM INSTRUCTIONS",
             custom_instructions or "Generate a comprehensive test plan based on the above requirements.",
             "",
@@ -681,22 +864,17 @@ class GenerationService:
             context,
             "",
             "# OUTPUT TEMPLATE (REFERENCE, NOT MANDATORY)",
-            template,
+            template if include_template else "Template disabled by user selection. Use custom instructions and context only.",
         ]
         
         return "\n\n".join(prompt_parts)
     
-    def _build_test_case_prompt(self, context: str, custom_prompt: Optional[str]) -> str:
+    def _build_test_case_prompt(self, context: str, custom_prompt: Optional[str], include_template: bool = True) -> str:
         """Build test case generation prompt."""
-        template_path = Path("./templates/test_case_generation.md")
-        template = self._load_valid_template(
-            template_path=template_path,
-            fallback_template=self._default_test_case_template(),
-            required_markers=["# test cases", "| test id |", "## functional test cases"],
-        )
+        template = self._resolve_test_case_template(include_template)
 
         custom_instructions = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else None
-        bdd_mode = self._is_bdd_requested(custom_instructions)
+        bdd_mode = self._is_bdd_requested(custom_instructions, template)
 
         instruction_priority = [
             "# INSTRUCTION PRIORITY (HIGHEST TO LOWEST)",
@@ -732,10 +910,24 @@ class GenerationService:
             context,
             "",
             "# OUTPUT TEMPLATE (REFERENCE, NOT MANDATORY)",
-            template,
+            template if include_template else "Template disabled by user selection. Use custom instructions and context only.",
         ]
         
         return "\n\n".join([part for part in prompt_parts if part.strip()])
+
+    def _resolve_section_prompt(self, section_prompt: Optional[str], legacy_prompt: Optional[str]) -> Optional[str]:
+        """Prefer section-specific prompt and fallback to legacy custom prompt."""
+        if section_prompt and section_prompt.strip():
+            return section_prompt
+        if legacy_prompt and legacy_prompt.strip():
+            return legacy_prompt
+        return None
+
+    def _merge_prompts(self, *prompts: Optional[str]) -> Optional[str]:
+        merged = [p.strip() for p in prompts if p and p.strip()]
+        if not merged:
+            return None
+        return "\n\n".join(merged)
     
     def _get_test_plan_system_prompt(self) -> str:
         """Get system prompt for test plan generation."""
@@ -794,11 +986,36 @@ Follow these principles:
 
 Output in professional Markdown format with tables."""
 
-    def _is_bdd_requested(self, custom_prompt: Optional[str]) -> bool:
-        """Detect whether the user explicitly requested BDD/Gherkin output."""
-        if not custom_prompt:
+    def _resolve_test_case_template(self, include_template: bool) -> str:
+        """Resolve test case template content with safe fallback."""
+        if not include_template:
+            return ""
+
+        template_path = Path("./templates/test_case_generation.md")
+        return self._load_valid_template(
+            template_path=template_path,
+            fallback_template=self._default_test_case_template(),
+            required_markers=["# test cases", "| test id |", "## functional test cases"],
+        )
+
+    def _template_indicates_bdd(self, template_text: Optional[str]) -> bool:
+        """Detect whether template content strongly indicates BDD/Gherkin output."""
+        if not template_text:
             return False
-        normalized = custom_prompt.lower()
+        normalized = template_text.lower()
+        bdd_markers = ["bdd", "gherkin", "feature:", "scenario:", "given", "when", "then"]
+        return sum(1 for marker in bdd_markers if marker in normalized) >= 3
+
+    def _is_bdd_requested(self, custom_prompt: Optional[str], template_hint: Optional[str] = None) -> bool:
+        """Detect whether BDD/Gherkin output should be used.
+
+        Priority:
+        1) Explicit user opt-out (non-BDD) wins.
+        2) Explicit user BDD request wins.
+        3) Otherwise infer from template when template clearly indicates BDD.
+        4) Default to BDD-first output for deterministic Gherkin generation.
+        """
+        normalized = (custom_prompt or "").lower()
         # Respect explicit opt-out phrases first (e.g., "non-BDD", "without gherkin").
         non_bdd_markers = [
             "non-bdd",
@@ -813,7 +1030,13 @@ Output in professional Markdown format with tables."""
         if any(marker in normalized for marker in non_bdd_markers):
             return False
 
-        return any(keyword in normalized for keyword in ["bdd", "gherkin", "given-when-then", "given when then"])
+        if any(keyword in normalized for keyword in ["bdd", "gherkin", "given-when-then", "given when then"]):
+            return True
+
+        if self._template_indicates_bdd(template_hint):
+            return True
+
+        return True
 
     def _sanitize_generated_content(self, content: str) -> str:
         """Clean common HTML artifacts returned by models in markdown/plain outputs."""
@@ -1045,7 +1268,7 @@ Output in professional Markdown format with tables."""
 
     def _is_weak_test_plan(self, content: str) -> bool:
         """Detect weak/non-actionable test plan output."""
-        if not content or len(content.strip()) < 800:
+        if not content or len(content.strip()) < 450:
             return True
 
         lower = content.lower()
@@ -1059,7 +1282,8 @@ Output in professional Markdown format with tables."""
             'deliverable',
         ]
         found = sum(1 for marker in required_markers if marker in lower)
-        if found < 5:
+        section_count = len(re.findall(r'^\s*##\s+', content, re.MULTILINE))
+        if found < 4 and section_count < 6:
             return True
 
         if 'original prompt' in lower and 'test strategy' not in lower:
@@ -1082,7 +1306,7 @@ Output in professional Markdown format with tables."""
         if bdd_mode:
             if self._has_truncated_bdd_tail(content):
                 return True
-            return self._scenario_count(content) < 8
+            return self._scenario_count(content) < 12
 
         # Table mode: require reasonable row coverage.
         table_rows = re.findall(r'^\|.*\|$', content, re.MULTILINE)
@@ -1101,10 +1325,18 @@ Output in professional Markdown format with tables."""
         if not template_path.exists():
             return fallback_template
 
-        raw = template_path.read_text()
+        try:
+            raw = template_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            # Windows environments may default to cp1252 and fail on mixed/legacy files.
+            # Fallback to a permissive decode so generation does not crash on template read.
+            raw = template_path.read_text(encoding="latin-1", errors="replace")
         lower = raw.lower()
 
         # Reject prompt-library/article content accidentally used as generation template.
+        # Exception: test_case template may intentionally be a BDD prompt library.
+        template_name = template_path.name.lower()
+        allow_bdd_prompt_library = template_name == "test_case_generation.md" and self._template_indicates_bdd(raw)
         invalid_markers = [
             "author:",
             "website:",
@@ -1116,8 +1348,11 @@ Output in professional Markdown format with tables."""
             "[paste requirements",
             "rice pot",
         ]
-        if any(marker in lower for marker in invalid_markers):
+        if not allow_bdd_prompt_library and any(marker in lower for marker in invalid_markers):
             return fallback_template
+
+        if allow_bdd_prompt_library:
+            return raw
 
         if not all(marker in lower for marker in required_markers):
             return fallback_template
@@ -1208,201 +1443,255 @@ Output in professional Markdown format with tables."""
             return stripped
         return f"```gherkin\n{stripped}\n```"
 
+    def _feature_focus(self, custom_prompt: Optional[str], context: str) -> str:
+        """Infer a neutral feature focus phrase from prompt/context."""
+        candidate = (custom_prompt or "").strip()
+        if not candidate:
+            candidate = (context or "").strip()
+        if not candidate:
+            return "Target Feature"
+
+        # Collapse multiline prompt and keep a readable short title.
+        candidate = re.sub(r"\s+", " ", candidate)
+        return candidate[:80].strip(" .:-") or "Target Feature"
+
+    def _default_clarification_questions(self, prompt_hint: Optional[str]) -> List[str]:
+        """Return neutral clarification questions (no stale domain hardcoding)."""
+        focus = self._feature_focus(prompt_hint, "")
+        return [
+            f"For '{focus}', what are the mandatory input fields and validation rules?",
+            "What are the expected success outcomes and key error conditions?",
+            "Are there role/permission constraints that should be validated?",
+            "Which boundary and negative scenarios are highest priority?",
+            "Do you have any API/UI constraints or examples to anchor expected results?",
+        ]
+
     def _build_fallback_bdd_test_cases(self, context: str, custom_prompt: Optional[str]) -> str:
         """Produce a deterministic baseline BDD suite when model output is empty."""
-        feature_name = "Purge Rule Management in Agent Portal"
-        domain_hint = "records are purged according to configured retention rules"
-
-        if "purge" not in (context or "").lower() and "purge" not in (custom_prompt or "").lower():
-            feature_name = "Configuration Workflow in Agent Portal"
-            domain_hint = "configuration changes are validated and applied safely"
+        feature_name = self._feature_focus(custom_prompt, context)
+        domain_hint = "the requested behavior works correctly with functional, negative, and edge validations"
 
         return f"""@Functional
 Feature: {feature_name}
-    As a configuration administrator
-    I want to create, edit, and execute configuration safely
+    As a product user
+    I want the requested behavior to work reliably
     So that {domain_hint}
 
     Background:
-        Given I am authenticated in the agent portal
-        And I have permission to manage purge configurations
+        Given the system is available
+        And the user has required access rights
 
     @Functional @Acceptance
-    Scenario: Create soft purge rule with valid values
-        Given I am on the purge rule configuration page
-        When I create a soft purge rule with valid retention inputs
-        Then the rule is saved successfully
-        And the rule is listed as active
+    Scenario: Complete primary workflow with valid input
+        Given valid data is prepared
+        When the user performs the primary action
+        Then the operation succeeds
+        And the expected output is visible
 
     @Functional @Acceptance
-    Scenario: Create hard purge rule with valid values
-        Given I am on the purge rule configuration page
-        When I create a hard purge rule with valid retention inputs
-        Then the rule is saved successfully
-        And the rule is listed as active
+    Scenario: Complete secondary workflow with valid input
+        Given valid data is prepared
+        When the user performs a related action
+        Then the system processes it successfully
+        And data remains consistent
 
     @Negative
-    Scenario: Reject rule creation with missing mandatory fields
-        Given I am on the purge rule configuration page
-        When I submit a rule with required fields missing
-        Then I see validation errors for each missing field
-        And the rule is not created
+    Scenario: Reject request with missing required fields
+        Given a required field is not provided
+        When the user submits the request
+        Then the system blocks submission
+        And shows a clear validation error
 
     @Negative
-    Scenario: Reject negative retention values
-        Given I am creating a purge rule
-        When I enter negative retention values
-        Then the system blocks save
-        And shows a validation message
+    Scenario: Reject malformed or invalid input
+        Given input violates validation rules
+        When the user submits the action
+        Then the system rejects the request
+        And returns a meaningful error response
 
     @EdgeCase
-    Scenario Outline: Validate retention boundary values
-        Given I am creating a purge rule
-        When I enter retention value <value>
+    Scenario Outline: Validate boundary values
+        Given the user is entering boundary data
+        When value <value> is submitted
         Then the system returns <result>
 
         Examples:
             | value | result            |
             | 0     | validation error  |
             | 1     | accepted          |
-            | 9999  | accepted or capped|
+            | 9999  | accepted or capped |
 
     @E2E
-    Scenario: Execute scheduled soft purge run
-        Given an active soft purge rule exists
-        When the scheduled time is reached
-        Then eligible records are soft purged
-        And a run entry is recorded in audit logs
+    Scenario: End-to-end flow succeeds
+        Given prerequisites are completed
+        When the user executes the full flow
+        Then all expected stages complete successfully
+        And results are recorded for auditability
 
     @E2E
-    Scenario: Execute scheduled hard purge run
-        Given an active hard purge rule exists
-        When the scheduled time is reached
-        Then eligible records are hard purged
-        And a run entry is recorded in audit logs
+    Scenario: End-to-end flow handles failure safely
+        Given a recoverable failure condition occurs
+        When the flow is executed
+        Then the system reports failure clearly
+        And preserves data integrity
 
     @Functional
-    Scenario: Edit existing purge rule
-        Given an active purge rule exists
-        When I update retention configuration and save
-        Then the updated rule is persisted
-        And future runs use updated values
+    Scenario: Update existing entity successfully
+        Given an existing entity is present
+        When the user edits and saves changes
+        Then updates are persisted
+        And subsequent reads return updated data
 
     @Functional
-    Scenario: Disable purge rule
-        Given an active purge rule exists
-        When I disable the rule
-        Then the rule status becomes disabled
-        And scheduled runs do not execute for that rule
+    Scenario: Disable feature-specific entity
+        Given an active entity exists
+        When the user disables it
+        Then status changes to disabled
+        And dependent actions no longer execute
 
     @Exploratory
-    Scenario: Verify behavior with concurrent rule updates
-        Given two admins open the same purge rule
+    Scenario: Verify behavior with concurrent updates
+        Given two users open the same entity
         When both attempt updates concurrently
         Then conflict handling prevents silent overwrite
         And the user sees clear resolution guidance
 
     @Negative
-    Scenario: Unauthorized user attempts purge rule changes
+    Scenario: Unauthorized user attempts restricted action
         Given a user without required permission is logged in
-        When the user tries to create or edit purge rules
+        When the user tries a restricted operation
         Then access is denied
         And the action is logged as unauthorized
 
     @Functional
-    Scenario: View purge execution history and status
-        Given purge runs have executed
-        When I open purge history
-        Then I see run status, timestamp, and impacted record counts
+    Scenario: View operation history and status
+        Given actions have been executed previously
+        When the user opens history
+        Then status, timestamps, and key metrics are visible
 """
 
     def _build_fallback_table_test_cases(self, context: str, custom_prompt: Optional[str]) -> str:
         """Produce deterministic markdown testcases for non-BDD mode."""
-        return """# Test Cases
+        focus = self._feature_focus(custom_prompt, context)
+        return f"""# Test Cases - {focus}
 
 ## Functional Test Cases
 
 | Test ID | Description | Preconditions | Steps | Expected Result | Priority |
 |---------|-------------|---------------|-------|-----------------|----------|
-| TC-F-001 | Create soft purge rule with valid data | User has config access | Open purge config, enter valid soft purge values, save | Rule is created and shown active | High |
-| TC-F-002 | Create hard purge rule with valid data | User has config access | Open purge config, enter valid hard purge values, save | Rule is created and shown active | High |
-| TC-F-003 | Edit existing purge rule | Existing purge rule present | Open rule, update retention values, save | Updated values are persisted | High |
-| TC-F-004 | Disable purge rule | Existing active rule present | Open rule, disable, save | Rule status changes to disabled | Medium |
-| TC-F-005 | View purge rule details | Existing rule present | Open rule details page | All configured values are displayed correctly | Medium |
+| TC-F-001 | Execute primary workflow with valid data | User has required access | Enter valid input and submit primary action | Operation succeeds and output is shown | High |
+| TC-F-002 | Execute secondary workflow with valid data | User has required access | Trigger related action with valid input | Operation succeeds with correct state update | High |
+| TC-F-003 | Update existing entity | Existing entity present | Open entity, edit fields, save | Changes persist and are visible on reload | High |
+| TC-F-004 | Disable active entity | Existing active entity present | Disable entity and save | Status becomes disabled and behavior reflects disabled state | Medium |
+| TC-F-005 | View entity details | Existing entity present | Open details page/view | Configured values are displayed accurately | Medium |
 
 ## Negative Test Cases
 
 | Test ID | Description | Preconditions | Steps | Expected Result | Priority |
 |---------|-------------|---------------|-------|-----------------|----------|
-| TC-N-001 | Submit rule with missing mandatory fields | User has config access | Leave required fields empty and save | Validation errors are shown; save blocked | High |
-| TC-N-002 | Submit negative retention values | User has config access | Enter negative value and save | Validation error shown; save blocked | High |
-| TC-N-003 | Unauthorized user modifies purge rule | User lacks required role | Attempt create/edit action | Access denied and action not persisted | High |
-| TC-N-004 | Invalid schedule format | User has config access | Enter invalid schedule/time format and save | Validation error shown | Medium |
+| TC-N-001 | Submit with missing mandatory fields | User has required access | Leave required fields empty and submit | Validation errors are shown and action is blocked | High |
+| TC-N-002 | Submit invalid value format | User has required access | Enter malformed value and submit | Validation error shown; action blocked | High |
+| TC-N-003 | Unauthorized user attempts modification | User lacks required role | Attempt create/edit action | Access denied and action not persisted | High |
+| TC-N-004 | Backend returns processing error | Service endpoint available | Trigger known invalid request | User sees clear error and no partial save | Medium |
 
 ## Boundary and Edge Cases
 
 | Test ID | Description | Preconditions | Steps | Expected Result | Priority |
 |---------|-------------|---------------|-------|-----------------|----------|
-| TC-B-001 | Retention minimum boundary | User has config access | Enter minimum allowed retention value and save | Rule saved successfully | Medium |
-| TC-B-002 | Retention maximum boundary | User has config access | Enter maximum allowed retention value and save | Rule saved successfully | Medium |
-| TC-B-003 | Retention below minimum | User has config access | Enter value below minimum and save | Validation error shown | High |
-| TC-B-004 | Retention above maximum | User has config access | Enter value above maximum and save | Validation error shown | High |
-| TC-E-001 | Concurrent edits to same rule | Two users editing same rule | Save conflicting updates from both users | Conflict handled; no silent overwrite | Medium |
-| TC-E-002 | Scheduled purge run with no eligible records | Active rule exists | Trigger scheduled run with no matching records | Run completes safely with zero affected count | Medium |
+| TC-B-001 | Minimum boundary accepted | User has required access | Submit minimum allowed value | Request accepted and saved | Medium |
+| TC-B-002 | Maximum boundary accepted | User has required access | Submit maximum allowed value | Request accepted and saved | Medium |
+| TC-B-003 | Below-minimum boundary rejected | User has required access | Submit value below minimum | Validation error shown | High |
+| TC-B-004 | Above-maximum boundary rejected | User has required access | Submit value above maximum | Validation error shown | High |
+| TC-E-001 | Concurrent updates conflict handling | Two users editing same entity | Save conflicting updates from both users | Conflict handled; no silent overwrite | Medium |
+| TC-E-002 | Empty-result execution path | Valid setup with no matching data | Execute operation with no matching records | Operation completes safely with no data corruption | Medium |
 """
 
     def _build_fallback_test_plan(self, context: str, custom_prompt: Optional[str]) -> str:
         """Produce deterministic complete test plan when model output is weak."""
-        return """# Test Plan
+        focus = self._feature_focus(custom_prompt, context)
+        source = f"{custom_prompt or ''}\n{context or ''}".lower()
+
+        scope_items = [
+            "Functional behavior and core workflow validation",
+            "Negative scenarios and failure-path handling",
+            "Boundary and edge behavior under abnormal inputs",
+        ]
+        objective_items = [
+            "Verify expected workflow execution and outcomes",
+            "Verify robust error handling with meaningful failure signals",
+            "Verify data integrity and operational reliability",
+        ]
+        risk_rows = [
+            ("Missing explicit business rules", "Use conservative assumptions and flag clarifications"),
+            ("Incomplete validation details", "Add exploratory and boundary-oriented test design"),
+        ]
+
+        if "jenkins" in source:
+            scope_items.append("Jenkins pipeline stage orchestration and node/pod provisioning behavior")
+            objective_items.append("Confirm Jenkins pipeline failure path captures actionable diagnostics")
+            risk_rows.append(("Jenkins agent/environment drift", "Pin agent image/tool versions and verify startup checks"))
+        if "gitlab" in source:
+            scope_items.append("GitLab repository access, checkout, and credential usage flows")
+            objective_items.append("Validate secure GitLab token handling and repository fetch behavior")
+            risk_rows.append(("GitLab credential/token issues", "Add auth-failure and token-rotation regression tests"))
+        if "stringindexoutofboundsexception" in source or "stringindexoutofbounds" in source:
+            scope_items.append("Runtime exception handling for string parsing and empty-value edge cases")
+            objective_items.append("Prevent StringIndexOutOfBoundsException via defensive input validation")
+            risk_rows.append(("Unhandled string parsing exceptions", "Add null/empty/malformed input checks before substring operations"))
+
+        scope_text = "\n".join(f"- {item}" for item in scope_items)
+        objective_text = "\n".join(f"- {item}" for item in objective_items)
+        risk_text = "\n".join(f"| {risk} | {mitigation} |" for risk, mitigation in risk_rows)
+
+        return f"""# Test Plan - {focus}
 
 ## 1. Introduction
-This test plan covers validation of the target feature using available requirement context and explicit assumptions where details are missing.
+This test plan validates the requested behavior for **{focus}** using provided context and explicit assumptions where details are missing.
 
 ## 2. Scope
-- In scope: functional behavior, validation rules, negative scenarios, boundary handling, and execution outcomes.
-- Out of scope: undocumented features and external systems not present in provided inputs.
+### In Scope
+{scope_text}
+
+### Out of Scope
+- Undocumented features and external systems not referenced in provided inputs.
 
 ## 3. Test Objectives
-- Verify correctness of core feature behavior.
-- Verify error handling and validation controls.
-- Verify data integrity and permission constraints.
+{objective_text}
 
 ## 4. Test Strategy and Approach
-- Functional testing for expected workflows.
-- Negative testing for invalid inputs and unauthorized actions.
-- Boundary and edge testing for limits and concurrency.
-- Regression checks on key flows after updates.
+- Functional testing for expected flows
+- Negative testing for failure modes and invalid inputs
+- Boundary and edge testing for limits and malformed values
+- Regression testing for previously failed areas
 
 ## 5. Coverage Matrix
 | Area | Coverage Type |
 |------|---------------|
 | Core workflow | Functional, E2E |
-| Validation | Negative, Boundary |
-| Authorization | Negative, Security |
-| Data consistency | Edge, Regression |
+| Error handling | Negative, Failure-mode |
+| Input robustness | Boundary, Edge |
+| Reliability | Regression |
 
 ## 6. Entry and Exit Criteria
 ### Entry Criteria
-- Requirements context available.
-- Test environment reachable.
+- Requirements context is available.
+- Test environment and required integrations are reachable.
 
 ### Exit Criteria
-- Critical defects resolved or accepted with mitigation.
-- Core, negative, and boundary tests executed.
+- Critical defects are resolved or explicitly accepted.
+- Core, negative, and boundary scenarios are executed.
 
 ## 7. Risks and Mitigations
 | Risk | Mitigation |
 |------|------------|
-| Missing detailed UI specs | Proceed with assumptions and mark unclear areas |
-| Incomplete validation rules | Add exploratory and boundary tests |
-| Authorization ambiguity | Add permission-focused negative tests |
+{risk_text}
 
 ## 8. Assumptions and Dependencies
-- Missing UI specifics are interpreted using standard configuration patterns.
-- Unspecified ranges are validated with conservative boundaries.
+- Missing implementation details are interpreted conservatively and flagged for clarification.
+- Integration endpoints and credentials are available in test environment.
 
 ## 9. Deliverables
 - Test plan document
-- Detailed test cases
-- Execution summary and defect report
+- Detailed test cases (functional, negative, boundary, edge)
+- Execution summary with defects and recommendations
 """

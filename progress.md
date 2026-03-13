@@ -111,3 +111,99 @@
 | Tests Passed | 0 (pending) |
 | Tests Failed | 0 |
 | Errors Fixed | 1 |
+
+---
+
+## 2026-03-10 - Regression And Quality Hardening
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 22:55 | Added Jira source traceability rule in test plan prompt | ✅ Complete | Plans now explicitly require Source Reference with issue key/summary when present |
+| 22:57 | Added regression test for traceability prompt | ✅ Complete | `test_test_plan_prompt_includes_source_traceability_rules` |
+| 22:59 | Ran regression gate suite | ✅ Complete | `23 passed, 8 warnings` for `tests/test_regression_api.py` + `tests/test_regression_units.py` |
+
+## 2026-03-11 - Enhanced Prompt Spec Implementation
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 16:35 | Parsed and analyzed `TestGen_AI_Enhanced_Prompt_Specification.pdf` | ✅ Complete | Extracted requirements for review modes, workflow, and regression additions |
+| 16:40 | Implemented isolated review backend modules | ✅ Complete | Added `backend/app/services/review_service.py` and `backend/app/routers/review.py` |
+| 16:42 | Extended data models and router registration | ✅ Complete | Added review schemas in `backend/app/models.py`; wired router in `backend/app/main.py` |
+| 16:43 | Expanded upload/parsing support for review artifacts | ✅ Complete | Added TXT/MD/XLSX parsing and upload MIME allowlist updates |
+| 16:45 | Added frontend review UX controls and output panel | ✅ Complete | Added `ReviewSection` and `ReviewOutput` with review action buttons |
+| 16:46 | Added regression tests RG-017 to RG-021 | ✅ Complete | Updated `backend/tests` and `REGRESSION_TESTCASES.md` |
+| 16:47 | Ran backend regression suite | ✅ Complete | `30 passed, 18 warnings` (`tests/test_regression_api.py`, `tests/test_regression_units.py`) |
+| 16:48 | Attempted frontend production build | ⚠️ Blocked by existing TS type mismatches | `frontend/src/components/SettingsModal.tsx` has pre-existing snake_case/camelCase contract issues |
+| 16:56 | Fixed settings payload typing and reran frontend build | ✅ Complete | `npm run build` successful; Vite output generated with only chunk-size warning |
+| 17:05 | Completed remaining clarification UX features | ✅ Complete | Added review clarification templates, submission box, file attachments, and collapsible clarification history |
+| 17:07 | Implemented smart default clarification prompts | ✅ Complete | Added BDD strictness, Excel test-ID auto-detect, URL freshness, and source-version prompts |
+| 17:08 | Implemented timeout fallback behavior | ✅ Complete | `GET /api/review/{review_id}/status` now auto-applies assumptions after 30 minutes |
+| 17:10 | Added validation parity and regression checks | ✅ Complete | Added invalid URL regression and smart-default/timeout unit tests |
+| 17:12 | Final verification run | ✅ Complete | Backend regression: `33 passed`; frontend build successful; endpoint smoke test confirms enhanced questions |
+
+## 2026-03-13 - Jira Fetch Detail Enrichment
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 13:42 | Traced Jira fetch pipeline end-to-end | ✅ Complete | Confirmed data truncation in backend field extraction (`extract_relevant_fields`) and minimal UI preview rendering |
+| 13:44 | Enriched Jira backend payload with additional details | ✅ Complete | Added `additional_details` map with normalized values for non-core Jira fields; preserved all legacy response keys |
+| 13:45 | Expanded Jira fetch preview in Input Sources UI | ✅ Complete | Added status/assignee/reporter/description plus collapsible “More ticket details” rendering from `additional_details` |
+| 13:46 | Added regression coverage for Jira extraction compatibility | ✅ Complete | New tests verify legacy keys remain unchanged and additional details include custom/named fields |
+| 13:47 | Ran mandatory regression + frontend build gate | ✅ Complete | Backend: `35 passed`; frontend: `npm run build` successful (chunk-size warning only) |
+
+## 2026-03-13 - Multi-Ticket Input + AI Context Support
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 14:00 | Extended generation/review models for multi-ticket IDs | ✅ Complete | Added backward-compatible `jira_ids` and `valueedge_ids` fields while retaining legacy single-ID fields |
+| 14:03 | Updated backend AI context assembly for multiple tickets | ✅ Complete | Generation now fetches and merges context from all unique Jira/ValueEdge IDs in provided order |
+| 14:06 | Updated review requirement extraction for multiple tickets | ✅ Complete | Review workflow now includes all Jira/ValueEdge IDs in extracted requirement context |
+| 14:09 | Implemented UI multi-fetch for Jira/ValueEdge | ✅ Complete | Users can fetch tickets one-by-one, maintain fetched ticket list, and remove individual tickets |
+| 14:11 | Added searchable ticket detail panel | ✅ Complete | Added filter box for large `additional_details` blocks in Jira ticket cards |
+| 14:14 | Added regression coverage and reran gates | ✅ Complete | Backend regression: `37 passed`; frontend build already successful for UI changes |
+
+## 2026-03-13 - BDD Test Case Generation Optimization
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 15:35 | Root-cause analysis for BDD inconsistency | ✅ Complete | Found template validator was rejecting upgraded BDD template (`backend/templates/test_case_generation.md`) and forcing table fallback |
+| 15:38 | Enabled template-driven BDD mode inference | ✅ Complete | Generation now infers BDD mode from template signals (Feature/Scenario/Gherkin markers) when prompt is unspecified |
+| 15:40 | Added explicit opt-out precedence | ✅ Complete | `non-bdd` / `without gherkin` style instructions now override template-driven BDD defaults |
+| 15:42 | Strengthened BDD quality gate | ✅ Complete | Minimum scenario threshold increased to 12; retry instructions now enforce role/permission + data-integrity coverage |
+| 15:44 | Added regression tests for new behavior | ✅ Complete | Added unit tests for template-inferred BDD mode and explicit non-BDD override behavior |
+| 15:46 | Ran verification gates | ✅ Complete | Backend regression suite: `39 passed`; frontend `npm run build` successful (chunk-size warning only) |
+
+## 2026-03-13 - BDD Enforcement Follow-up (User Validation)
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 16:05 | Re-traced BDD bypass path | ✅ Complete | Verified UI sends template flags; identified remaining bypass risk when template disabled or table-style custom prompts dominate |
+| 16:08 | Enforced backend BDD-first default mode | ✅ Complete | `_is_bdd_requested` now defaults to BDD unless explicit non-BDD opt-out markers are present |
+| 16:10 | Updated runtime testcase template contract | ✅ Complete | Added mandatory Gherkin-only contract in `backend/templates/test_case_generation.md` |
+| 16:12 | Updated root testcase skill prompt guidance | ✅ Complete | `test_case_generation.md` changed to BDD-first wording and format instructions |
+| 16:14 | Added regression for BDD default behavior | ✅ Complete | New unit test verifies BDD mode remains true without prompt/template hints |
+| 16:16 | Verification run + smoke generation | ✅ Complete | Backend regression: `40 passed`; direct `/api/generate` smoke output includes `Feature`/`Scenario` and no table headers |
+
+## 2026-03-13 - Template Toggle Precedence Regression Verification
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 16:28 | Added precedence/fusion regression cases | ✅ Complete | Added tests validating template-disabled custom-priority and template-enabled custom+template fusion for both plan and case prompts |
+| 16:30 | Ran mandatory backend regression suite | ✅ Complete | `44 passed` (`tests/test_regression_api.py` + `tests/test_regression_units.py`) |
+
+## 2026-03-13 - Groq Selected Model Preservation Fix
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 16:42 | Traced model mismatch cause | ✅ Complete | Backend rate-limit recovery could silently switch from selected model (e.g., OpenAI GPT-OSS 120B) to llama fallback |
+| 16:45 | Updated Groq retry policy | ✅ Complete | On rate-limit, retry now preserves the same selected Groq model only (reduced token budget); no silent cross-model fallback |
+| 16:47 | Added regression tests for retry policy | ✅ Complete | Added unit tests for rate-limit same-model retry, low-remaining no fallback, and decommissioned-model fallback behavior |
+| 16:49 | Ran mandatory backend regression suite | ✅ Complete | `47 passed` (`tests/test_regression_api.py` + `tests/test_regression_units.py`) |
+
+## 2026-03-13 - Documentation Synchronization (README/AGENTS/Regression)
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 17:35 | Updated README for multi-ticket + BDD-first + Groq retry behavior | ✅ Complete | Added behavior notes for list-based IDs, BDD default mode, and same-model rate-limit retry strategy |
+| 17:37 | Updated AGENTS repository addendum | ✅ Complete | Synced implemented review/generation behavior and documentation sync rules |
+| 17:39 | Expanded regression testcase catalog | ✅ Complete | Added RG-022 to RG-031 coverage for multi-ticket input, BDD/template precedence, Groq retry, and Jira detail extraction |

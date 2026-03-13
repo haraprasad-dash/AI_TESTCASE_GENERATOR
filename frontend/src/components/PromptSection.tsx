@@ -7,8 +7,14 @@ import { api } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface Props {
-  value: string;
-  onChange: (value: string) => void;
+  testPlanPrompt: string;
+  onTestPlanPromptChange: (value: string) => void;
+  testCasePrompt: string;
+  onTestCasePromptChange: (value: string) => void;
+  useTestPlanTemplate: boolean;
+  onUseTestPlanTemplateChange: (value: boolean) => void;
+  useTestCaseTemplate: boolean;
+  onUseTestCaseTemplateChange: (value: boolean) => void;
   provider?: 'groq' | 'ollama';
   model?: string;
 }
@@ -20,32 +26,61 @@ const promptSuggestions = [
   { icon: FileCheck, label: 'API Coverage', text: 'Ensure all API endpoints are covered with valid and invalid request scenarios.' },
 ];
 
-export const PromptSection: React.FC<Props> = ({ value, onChange, provider = 'groq', model = 'llama-3.3-70b-versatile' }) => {
+export const PromptSection: React.FC<Props> = ({
+  testPlanPrompt,
+  onTestPlanPromptChange,
+  testCasePrompt,
+  onTestCasePromptChange,
+  useTestPlanTemplate,
+  onUseTestPlanTemplateChange,
+  useTestCaseTemplate,
+  onUseTestCaseTemplateChange,
+  provider = 'groq',
+  model = 'llama-3.3-70b-versatile',
+}) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
-  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isEnhancingPlan, setIsEnhancingPlan] = useState(false);
+  const [isEnhancingCase, setIsEnhancingCase] = useState(false);
 
-  const handleEnhance = async () => {
-    if (!value.trim()) {
+  const handleEnhance = async (target: 'plan' | 'case') => {
+    const sourceValue = target === 'plan' ? testPlanPrompt : testCasePrompt;
+    if (!sourceValue.trim()) {
       toast.error('Type a prompt first before enhancing');
       return;
     }
-    setIsEnhancing(true);
+
+    if (target === 'plan') {
+      setIsEnhancingPlan(true);
+    } else {
+      setIsEnhancingCase(true);
+    }
+
     try {
-      const res = await api.enhancePrompt(value, provider, model);
-      onChange(res.data.enhanced_prompt);
+      const res = await api.enhancePrompt(sourceValue, provider, model);
+      if (target === 'plan') {
+        onTestPlanPromptChange(res.data.enhanced_prompt);
+      } else {
+        onTestCasePromptChange(res.data.enhanced_prompt);
+      }
       toast.success('Prompt enhanced!');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to enhance prompt');
     } finally {
-      setIsEnhancing(false);
+      if (target === 'plan') {
+        setIsEnhancingPlan(false);
+      } else {
+        setIsEnhancingCase(false);
+      }
     }
   };
 
   const handleSuggestionClick = (index: number, text: string) => {
     setSelectedSuggestion(index);
-    const newValue = value ? `${value}\n\n${text}` : text;
-    onChange(newValue);
+    const nextPlan = testPlanPrompt ? `${testPlanPrompt}\n\n${text}` : text;
+    const nextCase = testCasePrompt ? `${testCasePrompt}\n\n${text}` : text;
+    onTestPlanPromptChange(nextPlan);
+    onTestCasePromptChange(nextCase);
     setTimeout(() => setSelectedSuggestion(null), 1000);
   };
 
@@ -114,36 +149,101 @@ export const PromptSection: React.FC<Props> = ({ value, onChange, provider = 'gr
         )}
       </div>
       
-      {/* Textarea */}
-      <div className="relative">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Enter specific instructions for test generation...
+      {/* Horizontal Prompt Sections */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-slate-200 p-4 bg-gradient-to-b from-white to-slate-50">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Test Plan Prompt</h3>
+              <p className="text-xs text-slate-500">Template: <span className="font-semibold">test_plan_generation.md</span></p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useTestPlanTemplate}
+                onChange={(e) => onUseTestPlanTemplateChange(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-xs font-medium text-slate-600">Use Template</span>
+            </label>
+          </div>
 
-Example: Focus on security testing and negative test cases for the authentication module. Include API validation tests."
-          rows={5}
-          className="input-field resize-none"
-        />
-        <div className="flex justify-between items-center mt-2">
-          <span className="text-xs text-slate-400">
-            Leave empty to use default templates
-          </span>
-          <div className="flex items-center gap-3">
-            <span className={`text-xs font-medium ${
-              value.length > 500 ? 'text-amber-500' : 'text-slate-400'
-            }`}>
-              {value.length} chars
+          <textarea
+            value={testPlanPrompt}
+            onChange={(e) => onTestPlanPromptChange(e.target.value)}
+            placeholder="Add test plan-specific instructions..."
+            rows={5}
+            className="input-field resize-none"
+          />
+
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-slate-400">
+              Empty + selected uses default template.
             </span>
-            <button
-              type="button"
-              onClick={handleEnhance}
-              disabled={isEnhancing || !value.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
-            >
-              <RefreshCw className={`w-3 h-3 ${isEnhancing ? 'animate-spin' : ''}`} />
-              {isEnhancing ? 'Enhancing...' : '✨ Enhance'}
-            </button>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-medium ${
+                testPlanPrompt.length > 500 ? 'text-amber-500' : 'text-slate-400'
+              }`}>
+                {testPlanPrompt.length} chars
+              </span>
+              <button
+                type="button"
+                onClick={() => handleEnhance('plan')}
+                disabled={isEnhancingPlan || !testPlanPrompt.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              >
+                <RefreshCw className={`w-3 h-3 ${isEnhancingPlan ? 'animate-spin' : ''}`} />
+                {isEnhancingPlan ? 'Enhancing...' : '✨ Enhance'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 bg-gradient-to-b from-white to-slate-50">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Test Case Prompt</h3>
+              <p className="text-xs text-slate-500">Template: <span className="font-semibold">test_case_generation.md</span></p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useTestCaseTemplate}
+                onChange={(e) => onUseTestCaseTemplateChange(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-xs font-medium text-slate-600">Use Template</span>
+            </label>
+          </div>
+
+          <textarea
+            value={testCasePrompt}
+            onChange={(e) => onTestCasePromptChange(e.target.value)}
+            placeholder="Add test case-specific instructions..."
+            rows={5}
+            className="input-field resize-none"
+          />
+
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-slate-400">
+              Empty + selected uses default template.
+            </span>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-medium ${
+                testCasePrompt.length > 500 ? 'text-amber-500' : 'text-slate-400'
+              }`}>
+                {testCasePrompt.length} chars
+              </span>
+              <button
+                type="button"
+                onClick={() => handleEnhance('case')}
+                disabled={isEnhancingCase || !testCasePrompt.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              >
+                <RefreshCw className={`w-3 h-3 ${isEnhancingCase ? 'animate-spin' : ''}`} />
+                {isEnhancingCase ? 'Enhancing...' : '✨ Enhance'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -159,8 +259,11 @@ Example: Focus on security testing and negative test cases for the authenticatio
               Pro Tip
             </p>
             <p className="text-sm text-blue-700">
-              Be specific about test types, coverage areas, or compliance requirements. 
-              The AI will tailor the output to match your exact needs.
+              Keep "Use Template" selected to fuse your custom text with the matching file.
+              If both prompt boxes are empty, both templates stay selected by default and AI uses
+              <span className="font-semibold"> test_plan_generation.md </span>
+              and
+              <span className="font-semibold"> test_case_generation.md</span>.
             </p>
           </div>
         </div>

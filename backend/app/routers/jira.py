@@ -1,7 +1,7 @@
 """
 JIRA API endpoints.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any
 from app.models import JiraConfig
 from app.services.jira_client import (
@@ -24,13 +24,23 @@ def get_jira_config() -> JiraConfig:
 
 
 @router.post("/test-connection")
-async def test_jira_connection(config: JiraConfig = Depends(get_jira_config)) -> Dict[str, Any]:
+async def test_jira_connection(
+    override: Dict[str, Any] = Body(default_factory=dict),
+    config: JiraConfig = Depends(get_jira_config),
+) -> Dict[str, Any]:
     """Test JIRA connection."""
-    if not all([config.base_url, config.username, config.api_token]):
+    merged = JiraConfig(
+        base_url=override.get("base_url") or config.base_url,
+        username=override.get("username") or config.username,
+        api_token=override.get("api_token") or config.api_token,
+        default_project=override.get("default_project") or config.default_project,
+    )
+
+    if not all([merged.base_url, merged.username, merged.api_token]):
         raise HTTPException(400, "JIRA not configured")
     
     try:
-        async with JiraClient(config) as client:
+        async with JiraClient(merged) as client:
             user = await client.test_connection()
             return {
                 "status": "success",

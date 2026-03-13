@@ -11,8 +11,12 @@ import type { FileInput } from '../types';
 interface Props {
   jiraId: string;
   setJiraId: (value: string) => void;
+  jiraIds: string[];
+  setJiraIds: (value: string[]) => void;
   valueEdgeId: string;
   setValueEdgeId: (value: string) => void;
+  valueEdgeIds: string[];
+  setValueEdgeIds: (value: string[]) => void;
   uploadedFiles: FileInput[];
   onFileUpload: (file: FileInput) => void;
   onRemoveFile: (fileId: string) => void;
@@ -23,38 +27,68 @@ type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 export const InputSection: React.FC<Props> = ({
   jiraId,
   setJiraId,
+  jiraIds,
+  setJiraIds,
   valueEdgeId,
   setValueEdgeId,
+  valueEdgeIds,
+  setValueEdgeIds,
   uploadedFiles,
   onFileUpload,
   onRemoveFile,
 }) => {
   const [jiraStatus, setJiraStatus] = useState<FetchStatus>('idle');
-  const [jiraTicket, setJiraTicket] = useState<any>(null);
+  const [jiraTickets, setJiraTickets] = useState<any[]>([]);
+  const [jiraDetailFilters, setJiraDetailFilters] = useState<Record<string, string>>({});
   const [veStatus, setVeStatus] = useState<FetchStatus>('idle');
-  const [veTicket, setVeTicket] = useState<any>(null);
+  const [veTickets, setVeTickets] = useState<any[]>([]);
 
   const clearJiraTicket = () => {
     setJiraId('');
     setJiraStatus('idle');
-    setJiraTicket(null);
   };
 
   const clearValueEdgeTicket = () => {
     setValueEdgeId('');
     setVeStatus('idle');
-    setVeTicket(null);
+  };
+
+  const upsertTicketByKey = (tickets: any[], ticket: any, keyField: 'key' | 'id') => {
+    const key = ticket?.[keyField];
+    if (!key) return tickets;
+    const idx = tickets.findIndex((t) => t?.[keyField] === key);
+    if (idx === -1) return [...tickets, ticket];
+    const next = [...tickets];
+    next[idx] = ticket;
+    return next;
+  };
+
+  const removeJiraTicket = (ticketKey: string) => {
+    setJiraTickets((prev) => prev.filter((t) => t.key !== ticketKey));
+    setJiraIds(jiraIds.filter((id) => id !== ticketKey));
+    setJiraDetailFilters((prev) => {
+      const next = { ...prev };
+      delete next[ticketKey];
+      return next;
+    });
+  };
+
+  const removeValueEdgeTicket = (ticketId: string) => {
+    setVeTickets((prev) => prev.filter((t) => String(t.id) !== String(ticketId)));
+    setValueEdgeIds(valueEdgeIds.filter((id) => id !== String(ticketId)));
   };
 
   const fetchJiraTicket = async () => {
     if (!jiraId.trim()) { toast.error('Enter a JIRA Issue ID first'); return; }
+    const normalizedJiraId = jiraId.trim().toUpperCase();
     setJiraStatus('loading');
-    setJiraTicket(null);
     try {
-      const res = await api.getJiraIssue(jiraId.trim());
-      setJiraTicket(res.data);
+      const res = await api.getJiraIssue(normalizedJiraId);
+      setJiraTickets((prev) => upsertTicketByKey(prev, res.data, 'key'));
+      setJiraIds(jiraIds.includes(res.data.key) ? jiraIds : [...jiraIds, res.data.key]);
       setJiraStatus('success');
       toast.success(`Fetched: ${res.data.key} — ${res.data.summary}`);
+      setJiraId('');
     } catch (err: any) {
       setJiraStatus('error');
       toast.error(err.response?.data?.detail || 'JIRA ticket not found');
@@ -63,13 +97,16 @@ export const InputSection: React.FC<Props> = ({
 
   const fetchVeTicket = async () => {
     if (!valueEdgeId.trim()) { toast.error('Enter a ValueEdge Item ID first'); return; }
+    const normalizedValueEdgeId = valueEdgeId.trim();
     setVeStatus('loading');
-    setVeTicket(null);
     try {
-      const res = await api.getValueEdgeItem(valueEdgeId.trim());
-      setVeTicket(res.data);
+      const res = await api.getValueEdgeItem(normalizedValueEdgeId);
+      setVeTickets((prev) => upsertTicketByKey(prev, res.data, 'id'));
+      const resolvedId = String(res.data.id ?? normalizedValueEdgeId);
+      setValueEdgeIds(valueEdgeIds.includes(resolvedId) ? valueEdgeIds : [...valueEdgeIds, resolvedId]);
       setVeStatus('success');
       toast.success(`Fetched: ${res.data.name || res.data.id}`);
+      setValueEdgeId('');
     } catch (err: any) {
       setVeStatus('error');
       toast.error(err.response?.data?.detail || 'ValueEdge item not found');
@@ -93,6 +130,10 @@ export const InputSection: React.FC<Props> = ({
     accept: {
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/plain': ['.txt', '.feature'],
+      'text/markdown': ['.md'],
       'image/*': ['.png', '.jpg', '.jpeg'],
     },
     maxSize: 20 * 1024 * 1024,
@@ -102,6 +143,121 @@ export const InputSection: React.FC<Props> = ({
     if (filename.endsWith('.pdf')) return <FileType2 className="w-5 h-5 text-red-500" />;
     if (filename.match(/\.(jpg|jpeg|png)$/)) return <FileImage className="w-5 h-5 text-green-500" />;
     return <FileText className="w-5 h-5 text-blue-500" />;
+  };
+
+  const formatTicketValue = (value: any): string => {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '—';
+      return value.map((item) => formatTicketValue(item)).join(', ');
+    }
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, any>);
+      if (entries.length === 0) return '—';
+      return entries
+        .map(([key, nested]) => `${key}: ${formatTicketValue(nested)}`)
+        .join(' | ');
+    }
+    return String(value);
+  };
+
+  const formatReadableText = (raw: string): string => {
+    if (!raw) return '';
+    const compact = raw.replace(/\s+/g, ' ').trim();
+    return compact
+      .replace(/\s([A-Z][A-Za-z\s/&()]{2,40}:)/g, '\n\n$1')
+      .replace(/\s([A-Z]{2,}\s?:)/g, '\n\n$1')
+      .replace(/\s([A-Z][a-z]+\s*:)/g, '\n$1')
+      .replace(/\s(\d+\.)\s/g, '\n$1 ')
+      .replace(/\.\s([A-Z])/g, '.\n$1')
+      .replace(/\s([•-])\s/g, '\n$1 ')
+      .trim();
+  };
+
+  const toReadableParagraphs = (raw: string): string[] => {
+    const text = formatReadableText(raw);
+    if (!text) return [];
+    return text
+      .split(/\n{2,}/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  };
+
+  const renderReadableTextBlock = (raw: string, maxHeightClass = 'max-h-56') => {
+    const paragraphs = toReadableParagraphs(raw);
+    if (paragraphs.length === 0) {
+      return <p className="text-emerald-700">—</p>;
+    }
+
+    return (
+      <div className={`mt-1 ${maxHeightClass} overflow-auto rounded-lg border border-emerald-200 bg-white/60 p-3 space-y-2`}>
+        {paragraphs.map((paragraph, index) => {
+          const isListLike = /^\d+\.|^[•-]/.test(paragraph);
+          return (
+            <p
+              key={`${index}-${paragraph.slice(0, 16)}`}
+              className={`text-emerald-700 whitespace-pre-wrap break-words ${isListLike ? 'pl-1' : ''}`}
+            >
+              {paragraph}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderTicketValue = (value: any) => {
+    if (value === null || value === undefined || value === '') {
+      return <span className="text-emerald-700">—</span>;
+    }
+
+    if (typeof value === 'string') {
+      const text = formatReadableText(value);
+      const isLong = text.length > 120;
+      if (!isLong) {
+        return <span className="text-emerald-700">{text}</span>;
+      }
+      return renderReadableTextBlock(text, 'max-h-52');
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return <span className="text-emerald-700">{String(value)}</span>;
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return <span className="text-emerald-700">—</span>;
+      }
+      return (
+        <ul className="mt-1 list-disc list-inside space-y-1.5 text-emerald-700">
+          {value.map((item, index) => (
+            <li key={`${index}-${typeof item}`}>{typeof item === 'object' ? JSON.stringify(item, null, 2) : formatReadableText(String(item))}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, any>);
+      if (entries.length === 0) {
+        return <span className="text-emerald-700">—</span>;
+      }
+
+      return (
+        <div className="mt-1 max-h-52 overflow-auto rounded-lg border border-emerald-200 bg-white/60 p-2 space-y-2">
+          {entries.map(([nestedKey, nestedValue]) => (
+            <div key={nestedKey} className="text-emerald-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{nestedKey}</p>
+              <div className="mt-0.5">{renderTicketValue(nestedValue)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <span className="text-emerald-700">{String(value)}</span>;
   };
 
   return (
@@ -118,7 +274,7 @@ export const InputSection: React.FC<Props> = ({
       </div>
       
       {/* Inputs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 gap-6 mb-6">
         {/* JIRA Input */}
         <div>
           <label className="input-label flex items-center gap-2">
@@ -130,7 +286,7 @@ export const InputSection: React.FC<Props> = ({
               <input
                 type="text"
                 value={jiraId}
-                onChange={(e) => { setJiraId(e.target.value.toUpperCase()); setJiraStatus('idle'); setJiraTicket(null); }}
+                onChange={(e) => { setJiraId(e.target.value.toUpperCase()); setJiraStatus('idle'); }}
                 onKeyDown={(e) => e.key === 'Enter' && fetchJiraTicket()}
                 placeholder="PROJ-123"
                 className={`input-field pl-10 pr-8 ${
@@ -160,14 +316,93 @@ export const InputSection: React.FC<Props> = ({
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
               >
                 <X className="w-4 h-4" />
-                Remove
+                Clear
               </button>
             )}
           </div>
-          {jiraStatus === 'success' && jiraTicket && (
-            <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
-              <p className="font-semibold">{jiraTicket.key} · {jiraTicket.issue_type} · {jiraTicket.priority}</p>
-              <p className="text-emerald-700 mt-0.5 line-clamp-2">{jiraTicket.summary}</p>
+          {jiraTickets.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {jiraTickets.map((ticket) => {
+                const fieldFilter = (jiraDetailFilters[ticket.key] || '').toLowerCase();
+                const detailEntries = Object.entries(ticket.additional_details || {}).filter(([fieldKey, fieldData]: [string, any]) => {
+                  if (!fieldFilter) return true;
+                  const name = String(fieldData?.name || fieldKey).toLowerCase();
+                  const value = formatTicketValue(fieldData?.value).toLowerCase();
+                  return name.includes(fieldFilter) || value.includes(fieldFilter);
+                });
+
+                return (
+                  <div key={ticket.key} className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{ticket.key} · {ticket.issue_type} · {ticket.priority}</p>
+                        <p className="text-emerald-700 mt-0.5 font-medium">{ticket.summary}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeJiraTicket(ticket.key)}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-emerald-700 hover:text-red-500 hover:bg-red-50 transition-all"
+                        title="Remove ticket"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                      {ticket.status && (
+                        <div className="rounded-lg border border-emerald-200 bg-white/50 px-2.5 py-1.5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Status</p>
+                          <p className="text-emerald-800">{ticket.status}</p>
+                        </div>
+                      )}
+                      {ticket.assignee && (
+                        <div className="rounded-lg border border-emerald-200 bg-white/50 px-2.5 py-1.5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Assignee</p>
+                          <p className="text-emerald-800">{ticket.assignee}</p>
+                        </div>
+                      )}
+                      {ticket.reporter && (
+                        <div className="rounded-lg border border-emerald-200 bg-white/50 px-2.5 py-1.5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Reporter</p>
+                          <p className="text-emerald-800">{ticket.reporter}</p>
+                        </div>
+                      )}
+                    </div>
+                    {ticket.description && (
+                      <div>
+                        <p className="font-medium text-emerald-800">Description</p>
+                        {renderReadableTextBlock(ticket.description, 'max-h-64')}
+                      </div>
+                    )}
+                    {ticket.additional_details && Object.keys(ticket.additional_details).length > 0 && (
+                      <details className="mt-1" open>
+                        <summary className="cursor-pointer font-medium text-emerald-800">
+                          More ticket details ({detailEntries.length}/{Object.keys(ticket.additional_details).length})
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          <input
+                            type="text"
+                            value={jiraDetailFilters[ticket.key] || ''}
+                            onChange={(e) => setJiraDetailFilters((prev) => ({ ...prev, [ticket.key]: e.target.value }))}
+                            placeholder="Filter details..."
+                            className="input-field text-sm"
+                          />
+                          <div className="max-h-72 overflow-auto rounded-lg border border-emerald-200 bg-white/60 p-3 space-y-1.5">
+                            {detailEntries.map(([fieldKey, fieldData]: [string, any]) => (
+                              <div key={fieldKey} className="text-emerald-800">
+                                <p className="font-medium">{fieldData?.name || fieldKey}</p>
+                                {renderTicketValue(fieldData?.value)}
+                              </div>
+                            ))}
+                            {detailEntries.length === 0 && (
+                              <p className="text-emerald-700">No matching fields.</p>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
           {jiraStatus === 'idle' && <p className="text-xs text-slate-500 mt-1.5 ml-1">Format: PROJECT-123</p>}
@@ -184,7 +419,7 @@ export const InputSection: React.FC<Props> = ({
               <input
                 type="text"
                 value={valueEdgeId}
-                onChange={(e) => { setValueEdgeId(e.target.value); setVeStatus('idle'); setVeTicket(null); }}
+                onChange={(e) => { setValueEdgeId(e.target.value); setVeStatus('idle'); }}
                 onKeyDown={(e) => e.key === 'Enter' && fetchVeTicket()}
                 placeholder="12345"
                 className={`input-field pl-12 pr-8 ${
@@ -214,14 +449,35 @@ export const InputSection: React.FC<Props> = ({
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
               >
                 <X className="w-4 h-4" />
-                Remove
+                Clear
               </button>
             )}
           </div>
-          {veStatus === 'success' && veTicket && (
-            <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
-              <p className="font-semibold">{veTicket.id} · {veTicket.type || veTicket.item_type}</p>
-              <p className="text-emerald-700 mt-0.5 line-clamp-2">{veTicket.name || veTicket.description}</p>
+          {veTickets.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {veTickets.map((ticket) => (
+                <div key={String(ticket.id)} className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{ticket.id} · {ticket.type || ticket.item_type}</p>
+                      <p className="text-emerald-700 mt-0.5 whitespace-pre-wrap">{ticket.name || ticket.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeValueEdgeTicket(String(ticket.id))}
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-emerald-700 hover:text-red-500 hover:bg-red-50 transition-all"
+                      title="Remove ticket"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {ticket.description && (
+                    <div className="max-h-52 overflow-auto rounded-lg border border-emerald-200 bg-white/60 p-2">
+                      <p className="text-emerald-700 whitespace-pre-wrap break-words">{formatReadableText(ticket.description)}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
           {veStatus === 'idle' && <p className="text-xs text-slate-500 mt-1.5 ml-1">Work item ID from ValueEdge</p>}
@@ -242,7 +498,7 @@ export const InputSection: React.FC<Props> = ({
       <div>
         <label className="input-label flex items-center gap-2">
           <FileText className="w-4 h-4 text-orange-500" />
-          Attach Documents
+          Attach Requirement Details
         </label>
         <div
           {...getRootProps()}
@@ -264,7 +520,7 @@ export const InputSection: React.FC<Props> = ({
               </p>
             </div>
             <p className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-              PDF, DOCX, PNG, JPG (max 20MB)
+              PDF, DOCX, XLSX, TXT, FEATURE, PNG, JPG (max 20MB)
             </p>
           </div>
         </div>

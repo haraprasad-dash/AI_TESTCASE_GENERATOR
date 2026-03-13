@@ -79,9 +79,15 @@ class FileInput(BaseModel):
 
 class GenerationInputs(BaseModel):
     jira_id: Optional[str] = Field(None, pattern=r"^[A-Z][A-Z0-9]*-\d+$")
+    jira_ids: List[str] = []
     valueedge_id: Optional[str] = None
+    valueedge_ids: List[str] = []
     files: List[FileInput] = []
     custom_prompt: Optional[str] = None
+    test_plan_prompt: Optional[str] = None
+    test_case_prompt: Optional[str] = None
+    use_test_plan_template: bool = True
+    use_test_case_template: bool = True
 
 
 class GenerationConfiguration(BaseModel):
@@ -129,6 +135,62 @@ class GenerationResponse(BaseModel):
     timestamp: datetime
     outputs: GenerationOutputs
     metadata: GenerationMetadata
+    error: Optional[str] = None
+
+
+# ============================================
+# Review Request/Response Models
+# ============================================
+
+class ClarificationEntry(BaseModel):
+    questions: List[str] = []
+    answer: str
+
+
+class ReviewInputs(BaseModel):
+    jira_id: Optional[str] = Field(None, pattern=r"^[A-Z][A-Z0-9]*-\d+$")
+    jira_ids: List[str] = []
+    valueedge_id: Optional[str] = None
+    valueedge_ids: List[str] = []
+    files: List[FileInput] = []
+    custom_instructions: Optional[str] = None
+    review_test_cases: bool = True
+    review_user_guide: bool = True
+    user_guide_url: Optional[str] = None
+    clarification_history: List[ClarificationEntry] = []
+
+
+class ReviewConfiguration(BaseModel):
+    provider: Literal["groq", "ollama"] = "groq"
+    model: Optional[str] = None
+    temperature: float = 0.2
+
+
+class ReviewRequest(BaseModel):
+    request_id: Optional[str] = None
+    timestamp: datetime
+    inputs: ReviewInputs
+    configuration: ReviewConfiguration
+
+
+class ReviewMetadata(BaseModel):
+    review_type: Literal["test-cases", "user-guide", "both"]
+    clarification_required: bool = False
+    clarification_questions: List[str] = []
+    clarification_round: int = 0
+    max_clarification_rounds: int = 3
+    assumptions_applied: bool = False
+    sources: List[str] = []
+
+
+class ReviewResponse(BaseModel):
+    review_id: str
+    status: Literal["completed", "clarification_required", "failed"]
+    timestamp: datetime
+    report_markdown: str
+    report_json: Dict[str, Any]
+    partial_results: Optional[Dict[str, Any]] = None
+    metadata: ReviewMetadata
     error: Optional[str] = None
 
 

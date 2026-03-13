@@ -1,7 +1,7 @@
 """
 ValueEdge API endpoints.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Dict, Any, Optional
 from app.models import ValueEdgeConfig
 from app.services.valueedge_client import (
@@ -25,14 +25,22 @@ def get_valueedge_config() -> ValueEdgeConfig:
 
 @router.post("/test-connection")
 async def test_valueedge_connection(
+    override: Dict[str, Any] = Body(default_factory=dict),
     config: ValueEdgeConfig = Depends(get_valueedge_config)
 ) -> Dict[str, Any]:
     """Test ValueEdge connection."""
-    if not all([config.base_url, config.client_id, config.client_secret]):
+    merged = ValueEdgeConfig(
+        base_url=override.get("base_url") or config.base_url,
+        client_id=override.get("client_id") or config.client_id,
+        client_secret=override.get("client_secret") or config.client_secret,
+        shared_space_id=override.get("shared_space_id") or config.shared_space_id,
+    )
+
+    if not all([merged.base_url, merged.client_id, merged.client_secret]):
         raise HTTPException(400, "ValueEdge not configured")
     
     try:
-        async with ValueEdgeClient(config) as client:
+        async with ValueEdgeClient(merged) as client:
             spaces = await client.test_connection()
             space_list = spaces.get("data", [])
             return {

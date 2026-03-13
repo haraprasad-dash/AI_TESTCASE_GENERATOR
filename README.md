@@ -80,8 +80,10 @@ Open **http://localhost:3000** in your browser.
 | Feature | Description |
 |---------|-------------|
 | Multi-Source Input | Combine JIRA, ValueEdge, and document uploads in one generation |
+| Multi-Ticket Support | Add and fetch multiple JIRA and ValueEdge IDs in a single run |
 | Fetch & Validate | Fetch button validates ticket/item IDs before generation |
 | AI-Powered Generation | LLM-driven extraction and structuring of test scenarios |
+| BDD-First Test Cases | Default test-case output is Gherkin-style BDD unless explicitly opted out |
 | Clarification Workflow | UI asks follow-up questions when clarification is required before final case output |
 | Review Workflows | Dedicated Test Case Review and User Guide Review modes with intelligent clarification |
 | Review Prompt Enhancement | `✨ Enhance` button improves Review Custom Instructions using selected provider/model |
@@ -384,11 +386,15 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 
 **Format:** `PROJECT-123` (project key dash number)
 
+**Multi-ID:** Fetch and retain multiple JIRA IDs in the input panel; all selected tickets are included in AI context.
+
 **Data Extracted:** Summary, description, issue type, priority, labels, status, assignee
 
 ### ValueEdge
 
 **Format:** Numeric ID (e.g. `12345`)
+
+**Multi-ID:** Fetch and retain multiple ValueEdge IDs; all selected items are included in AI context.
 
 **Data Extracted:** Item name, description, type, phase, story points
 
@@ -428,6 +434,12 @@ The model list in UI is loaded dynamically from Groq live availability and known
 | `llama-3.1-8b-instant` | Fast | Good |
 | `mixtral-8x7b-32768` | Medium | Good (long context) |
 | `gemma2-9b-it` | Fast | Good |
+
+### Groq Rate-Limit Behavior
+
+- Generation now preserves your selected Groq model on rate-limit retries (no silent downgrade to another model).
+- If token budget is temporarily constrained, backend uses bounded delayed backoff and retries with the same selected model.
+- If remaining quota is too low to retry safely, generation fails with a user-friendly quota message.
 
 ### Ollama Models (Local)
 
@@ -479,7 +491,11 @@ cd backend
 ### What It Covers
 
 - Empty vs valid generation input gating (including custom-instructions-only flow)
+- Multi-ticket input detection and routing (`jira_ids` / `valueedge_ids`)
+- BDD-first testcase generation with explicit non-BDD opt-out handling
+- Template-toggle precedence and template+custom prompt fusion behavior
 - Friendly error mapping for Groq rate-limit failures
+- Groq same-model retry policy and rate-limit backoff parsing
 - Secret normalization (`Bearer` prefix handling, masked placeholder preservation)
 - LLM test-connection and model-list key handling
 - Settings API secret masking and default-provider behavior
@@ -602,10 +618,12 @@ AI_TESTCASE_GENERATOR/
 ├── frontend/                 # React + Vite application
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── InputSection.tsx      # JIRA/ValueEdge inputs + Fetch buttons
+│   │   │   ├── InputSection.tsx      # Multi-ticket JIRA/ValueEdge inputs + Fetch cards
 │   │   │   ├── AIConfigSection.tsx   # Provider/model/temperature selector
 │   │   │   ├── OutputPreview.tsx     # Markdown renderer + Export buttons + Refresh
-│   │   │   ├── PromptSection.tsx     # Custom prompt textarea
+│   │   │   ├── PromptSection.tsx     # Test plan/test case prompts + template toggles
+│   │   │   ├── ReviewSection.tsx     # Review workflow controls
+│   │   │   ├── ReviewOutput.tsx      # Review result/clarification panel
 │   │   │   └── SettingsModal.tsx     # Settings overlay
 │   │   ├── pages/HomePage.tsx        # Main page layout
 │   │   ├── services/api.ts           # Axios API client

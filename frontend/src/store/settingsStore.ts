@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Settings } from '../types';
 
 interface SettingsStore extends Settings {
+  setAll: (settings: Settings) => void;
   updateJira: (settings: Partial<Settings['jira']>) => void;
   updateValueEdge: (settings: Partial<Settings['valueedge']>) => void;
   updateLLM: (settings: Partial<Settings['llm']>) => void;
@@ -40,6 +41,7 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       ...defaultSettings,
+      setAll: (settings) => set(() => ({ ...settings })),
       updateJira: (settings) =>
         set((state) => ({ jira: { ...state.jira, ...settings } })),
       updateValueEdge: (settings) =>

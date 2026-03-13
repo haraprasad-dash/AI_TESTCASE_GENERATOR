@@ -21,6 +21,10 @@ UPLOAD_DIR = Path("./uploads")
 ALLOWED_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "text/plain",
+    "text/markdown",
     "image/png",
     "image/jpeg",
     "image/jpg"
@@ -38,7 +42,10 @@ async def upload_file(file: UploadFile = File(...)):
     """
     # Validate file type
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(400, f"Unsupported file type: {file.content_type}")
+        raise HTTPException(
+            400,
+            "Unsupported file type. Allowed: PDF, DOCX, XLSX, TXT, FEATURE"
+        )
     
     # Generate unique file ID
     file_id = str(uuid.uuid4())

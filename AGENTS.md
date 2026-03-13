@@ -239,6 +239,23 @@ This workspace now includes production-facing implementation artifacts in additi
 - Clarification attachment uploads
 - Timeout fallback on status polling (best-effort assumptions after 30 minutes)
 
+### Multi-Source Input Behavior (Implemented)
+
+- Generation and review support both legacy single IDs and list-based IDs:
+   - `jira_id` + `jira_ids`
+   - `valueedge_id` + `valueedge_ids`
+- Backend uses all unique provided IDs when assembling AI requirement context.
+- Frontend `InputSection` supports fetch/add/remove flows for multiple Jira and ValueEdge items.
+
+### Generation Quality/Provider Behavior (Implemented)
+
+- Test case generation is BDD-first by default, with explicit non-BDD opt-out respected.
+- Template toggle precedence is enforced:
+   - template disabled => custom prompt priority
+   - template enabled => template+custom fusion
+- Groq rate-limit handling preserves selected model on retries; bounded delayed retry is same-model only.
+- User-friendly quota guidance is returned when retry is not feasible.
+
 ### Review Prompt Enhancement (Implemented)
 
 - Review UI now includes `✨ Enhance` for **Review Custom Instructions** in `frontend/src/components/ReviewSection.tsx`
@@ -247,9 +264,9 @@ This workspace now includes production-facing implementation artifacts in additi
 
 ### Documentation Sync Rule
 
-When review workflow logic changes, update all of the following together:
+When review/generation/settings workflow logic changes, update all of the following together:
 
-1. `README.md` (Review Workflows + API behavior)
+1. `README.md` (workflows + API/provider behavior)
 2. `REGRESSION_TESTCASES.md` (test IDs / expectations)
 3. `progress.md` (execution + verification summary)
 
