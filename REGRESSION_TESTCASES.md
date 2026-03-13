@@ -155,6 +155,25 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: Jira issue payload with both core and custom fields.
 - Expectation: legacy keys remain stable; non-core fields appear in `additional_details`.
 
+32. `RG-032` Enhance endpoint uses section-specific context digest
+- Endpoint: `POST /api/llm/enhance-prompt`
+- Input: prompt + `prompt_type` + context (`jira_ids`, `valueedge_ids`, attachments metadata).
+- Expectation: enhancement request remains grounded in provided context facts.
+
+33. `RG-033` Test plan enhancement prevents testcase drift
+- Endpoint: `POST /api/llm/enhance-prompt`
+- Input: `prompt_type=test_plan`, prompt with high-priority constraint, mocked misaligned LLM output.
+- Expectation: response is corrected to test-plan-focused instruction and preserves priority constraint.
+
+34. `RG-034` Constraint retention in enhancement output
+- Function: `app.routers.llm._enforce_constraints`
+- Input: enhanced prompt missing explicit user constraints.
+- Expectation: missing constraints are appended to final enhanced prompt.
+
+35. `RG-035` Review enhancement subtype alignment
+- Endpoint/Function: enhance prompt with `review_test_cases` or `review_user_guide` subtype.
+- Expectation: output aligns to selected review subtype and avoids cross-domain drift.
+
 ## Manual Smoke Checks (recommended)
 
 1. Open UI Settings -> LLM Settings, save valid Groq key, reopen modal.

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CheckSquare, BookOpen, FileSearch, RefreshCw } from 'lucide-react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import type { FileInput, EnhancePromptType } from '../types';
 
 interface Props {
   reviewTestCases: boolean;
@@ -12,6 +13,9 @@ interface Props {
   setUserGuideUrl: (value: string) => void;
   reviewCustomInstructions: string;
   setReviewCustomInstructions: (value: string) => void;
+  jiraIds: string[];
+  valueEdgeIds: string[];
+  uploadedFiles: FileInput[];
   onReviewFilesSelected: (files: FileList) => Promise<void>;
   provider?: 'groq' | 'ollama';
   model?: string;
@@ -26,6 +30,9 @@ export const ReviewSection: React.FC<Props> = ({
   setUserGuideUrl,
   reviewCustomInstructions,
   setReviewCustomInstructions,
+  jiraIds,
+  valueEdgeIds,
+  uploadedFiles,
   onReviewFilesSelected,
   provider = 'groq',
   model = 'llama-3.3-70b-versatile',
@@ -47,7 +54,25 @@ export const ReviewSection: React.FC<Props> = ({
 
     setIsEnhancingInstructions(true);
     try {
-      const res = await api.enhancePrompt(reviewCustomInstructions, provider, model, 'review');
+      let promptType: EnhancePromptType = 'review';
+      if (reviewTestCases && !reviewUserGuide) {
+        promptType = 'review_test_cases';
+      } else if (!reviewTestCases && reviewUserGuide) {
+        promptType = 'review_user_guide';
+      }
+
+      const res = await api.enhancePrompt(reviewCustomInstructions, provider, model, promptType, {
+        jira_ids: jiraIds,
+        valueedge_ids: valueEdgeIds,
+        files: uploadedFiles.slice(0, 8).map((file) => ({
+          filename: file.filename,
+          content_type: file.content_type,
+          extracted_snippet: (file.extracted_text || '').slice(0, 180),
+        })),
+        user_guide_url: userGuideUrl.trim() || undefined,
+        review_test_cases: reviewTestCases,
+        review_user_guide: reviewUserGuide,
+      });
       setReviewCustomInstructions(res.data.enhanced_prompt);
       toast.success('Review instructions enhanced!');
     } catch (err: any) {

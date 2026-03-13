@@ -525,6 +525,9 @@ export const HomePage: React.FC = () => {
             onUseTestPlanTemplateChange={setUseTestPlanTemplate}
             useTestCaseTemplate={useTestCaseTemplate}
             onUseTestCaseTemplateChange={setUseTestCaseTemplate}
+            jiraIds={jiraIds}
+            valueEdgeIds={valueEdgeIds}
+            uploadedFiles={uploadedFiles}
             provider={provider}
             model={model}
           />
@@ -552,6 +555,9 @@ export const HomePage: React.FC = () => {
             setUserGuideUrl={setUserGuideUrl}
             reviewCustomInstructions={reviewCustomInstructions}
             setReviewCustomInstructions={setReviewCustomInstructions}
+            jiraIds={jiraIds}
+            valueEdgeIds={valueEdgeIds}
+            uploadedFiles={uploadedFiles}
             onReviewFilesSelected={handleReviewFilesSelected}
             provider={provider}
             model={model}

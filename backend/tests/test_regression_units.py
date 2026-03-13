@@ -109,6 +109,53 @@ def test_enhance_system_prompt_test_case_keeps_testcase_focus() -> None:
     assert "endpoints/fields/conditions/error codes" in prompt
 
 
+def test_enhance_context_digest_includes_sources_and_files() -> None:
+    context = llm_router.EnhancePromptContext(
+        jira_ids=["PROJ-1", "PROJ-2"],
+        valueedge_ids=["1001"],
+        files=[
+            llm_router.EnhancePromptFileContext(
+                filename="requirements.md",
+                content_type="text/markdown",
+                extracted_snippet="Login must support SSO and MFA",
+            )
+        ],
+        use_test_plan_template=True,
+    )
+
+    digest = llm_router._build_context_digest("test_plan", context)
+
+    assert "JIRA IDs: PROJ-1, PROJ-2" in digest
+    assert "ValueEdge IDs: 1001" in digest
+    assert "requirements.md" in digest
+    assert "Use test plan template: True" in digest
+
+
+def test_enhance_constraint_enforcement_appends_missing_constraints() -> None:
+    enhanced = "Create a test plan with scope and timeline."
+    constrained = llm_router._enforce_constraints(
+        enhanced,
+        ["Only include high-priority tasks."],
+    )
+
+    assert "Only include high-priority tasks." in constrained
+
+
+def test_enhance_alignment_fallback_for_test_plan_when_output_drifts_to_testcases() -> None:
+    assert llm_router._is_misaligned("test_plan", "Generate test cases for endpoints and fields") is True
+
+    fallback = llm_router._build_alignment_fallback(
+        "test_plan",
+        "only high priority items",
+        "JIRA IDs: PROJ-1",
+        ["Only include high-priority tasks."],
+    )
+
+    assert "TEST PLAN" in fallback
+    assert "do NOT generate test case lists" in fallback
+    assert "Only include high-priority tasks." in fallback
+
+
 @pytest.mark.asyncio
 async def test_get_settings_prefers_ollama_when_no_groq_key(monkeypatch) -> None:
     monkeypatch.setattr(

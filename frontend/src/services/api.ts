@@ -9,6 +9,8 @@ import type {
   ReviewInputs,
   ReviewConfiguration,
   ReviewResponse,
+  EnhancePromptType,
+  EnhancePromptContext,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -90,13 +92,15 @@ class ApiService {
     prompt: string,
     provider: 'groq' | 'ollama',
     model: string,
-    promptType: 'test_plan' | 'test_case' | 'review' = 'test_case'
+    promptType: EnhancePromptType = 'test_case',
+    context?: EnhancePromptContext
   ) {
     return this.client.post<{ enhanced_prompt: string }>('/api/llm/enhance-prompt', {
       prompt,
       provider,
       model,
       prompt_type: promptType,
+      context,
     });
   }
 

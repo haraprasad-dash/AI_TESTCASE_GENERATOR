@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import type { FileInput, EnhancePromptContext } from '../types';
 
 interface Props {
   testPlanPrompt: string;
@@ -15,6 +16,9 @@ interface Props {
   onUseTestPlanTemplateChange: (value: boolean) => void;
   useTestCaseTemplate: boolean;
   onUseTestCaseTemplateChange: (value: boolean) => void;
+  jiraIds: string[];
+  valueEdgeIds: string[];
+  uploadedFiles: FileInput[];
   provider?: 'groq' | 'ollama';
   model?: string;
 }
@@ -35,6 +39,9 @@ export const PromptSection: React.FC<Props> = ({
   onUseTestPlanTemplateChange,
   useTestCaseTemplate,
   onUseTestCaseTemplateChange,
+  jiraIds,
+  valueEdgeIds,
+  uploadedFiles,
   provider = 'groq',
   model = 'llama-3.3-70b-versatile',
 }) => {
@@ -42,6 +49,20 @@ export const PromptSection: React.FC<Props> = ({
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
   const [isEnhancingPlan, setIsEnhancingPlan] = useState(false);
   const [isEnhancingCase, setIsEnhancingCase] = useState(false);
+
+  const buildEnhanceContext = (target: 'plan' | 'case'): EnhancePromptContext => {
+    return {
+      jira_ids: jiraIds,
+      valueedge_ids: valueEdgeIds,
+      files: uploadedFiles.slice(0, 8).map((file) => ({
+        filename: file.filename,
+        content_type: file.content_type,
+        extracted_snippet: (file.extracted_text || '').slice(0, 180),
+      })),
+      use_test_plan_template: target === 'plan' ? useTestPlanTemplate : undefined,
+      use_test_case_template: target === 'case' ? useTestCaseTemplate : undefined,
+    };
+  };
 
   const handleEnhance = async (target: 'plan' | 'case') => {
     const sourceValue = target === 'plan' ? testPlanPrompt : testCasePrompt;
@@ -58,7 +79,13 @@ export const PromptSection: React.FC<Props> = ({
 
     try {
       const promptType = target === 'plan' ? 'test_plan' : 'test_case';
-      const res = await api.enhancePrompt(sourceValue, provider, model, promptType);
+      const res = await api.enhancePrompt(
+        sourceValue,
+        provider,
+        model,
+        promptType,
+        buildEnhanceContext(target),
+      );
       if (target === 'plan') {
         onTestPlanPromptChange(res.data.enhanced_prompt);
       } else {

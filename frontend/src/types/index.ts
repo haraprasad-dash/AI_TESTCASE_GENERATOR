@@ -144,3 +144,28 @@ export interface ReviewResponse {
   };
   error?: string;
 }
+
+export type EnhancePromptType =
+  | 'test_plan'
+  | 'test_case'
+  | 'review'
+  | 'review_test_cases'
+  | 'review_user_guide';
+
+export interface EnhancePromptFileContext {
+  filename: string;
+  content_type?: string;
+  extracted_snippet?: string;
+}
+
+export interface EnhancePromptContext {
+  jira_ids?: string[];
+  valueedge_ids?: string[];
+  files?: EnhancePromptFileContext[];
+  user_guide_url?: string;
+  review_test_cases?: boolean;
+  review_user_guide?: boolean;
+  use_test_plan_template?: boolean;
+  use_test_case_template?: boolean;
+  constraints?: string[];
+}
