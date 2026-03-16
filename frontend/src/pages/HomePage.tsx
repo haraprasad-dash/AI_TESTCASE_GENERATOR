@@ -61,7 +61,19 @@ export const HomePage: React.FC = () => {
   const [reviewTestCases, setReviewTestCases] = useState(true);
   const [reviewUserGuide, setReviewUserGuide] = useState(true);
   const [userGuideUrl, setUserGuideUrl] = useState('');
-  const [reviewCustomInstructions, setReviewCustomInstructions] = useState('');
+  const [testCaseReviewInstructions, setTestCaseReviewInstructions] = useState('');
+  const [userGuideReviewInstructions, setUserGuideReviewInstructions] = useState('');
+
+  const buildMergedReviewInstructions = () => {
+    const sections: string[] = [];
+    if (reviewTestCases && testCaseReviewInstructions.trim()) {
+      sections.push(`Test Case Review Instructions:\n${testCaseReviewInstructions.trim()}`);
+    }
+    if (reviewUserGuide && userGuideReviewInstructions.trim()) {
+      sections.push(`User Guide Review Instructions:\n${userGuideReviewInstructions.trim()}`);
+    }
+    return sections.filter(Boolean).join('\n\n');
+  };
 
   const hasGenerationInput = Boolean(
     jiraIds.length > 0 ||
@@ -91,7 +103,7 @@ export const HomePage: React.FC = () => {
         setUploadedFiles((prev) => [...prev, response.data]);
         toast.success(`Attached for review: ${file.name}`);
       } catch (error: any) {
-        toast.error(`Failed to attach ${file.name}`);
+        toast.error(error.response?.data?.detail || `Failed to attach ${file.name}`);
       }
     }
   };
@@ -103,7 +115,7 @@ export const HomePage: React.FC = () => {
         setUploadedFiles((prev) => [...prev, response.data]);
         toast.success(`Attached for clarification: ${file.name}`);
       } catch (error: any) {
-        toast.error(`Failed to attach ${file.name}`);
+        toast.error(error.response?.data?.detail || `Failed to attach ${file.name}`);
       }
     }
   };
@@ -238,10 +250,12 @@ export const HomePage: React.FC = () => {
   };
 
   const isTestCaseArtifact = (filename: string) => /\.(feature|xlsx|xls|txt|md)$/i.test(filename);
-  const isGuideArtifact = (filename: string) => /\.(pdf|docx|txt|md)$/i.test(filename);
 
   const validateReviewRequest = (reviewMode: 'test-cases' | 'user-guide' | 'both') => {
-    const hasCustomInstructions = Boolean(reviewCustomInstructions.trim());
+    const hasCustomInstructions = Boolean(
+      testCaseReviewInstructions.trim() ||
+      userGuideReviewInstructions.trim()
+    );
     const enableTestCaseReview = reviewMode === 'test-cases' || reviewMode === 'both' ? reviewTestCases : false;
     const enableUserGuideReview = reviewMode === 'user-guide' || reviewMode === 'both' ? reviewUserGuide : false;
 
@@ -259,9 +273,8 @@ export const HomePage: React.FC = () => {
     }
 
     if (enableUserGuideReview) {
-      const hasUserGuideFiles = uploadedFiles.some((file) => isGuideArtifact(file.filename));
-      if (!hasUserGuideFiles && !userGuideUrl.trim()) {
-        toast.error('Please upload user guide document or provide URL');
+      if (!userGuideUrl.trim()) {
+        toast.error('Please provide user guide URL');
         return false;
       }
     }
@@ -290,7 +303,9 @@ export const HomePage: React.FC = () => {
         valueedge_id: valueEdgeIds[0] || valueEdgeId || undefined,
         valueedge_ids: valueEdgeIds.length > 0 ? valueEdgeIds : undefined,
         files: uploadedFiles,
-        custom_instructions: reviewCustomInstructions.trim() || undefined,
+        custom_instructions: buildMergedReviewInstructions() || undefined,
+        test_case_review_instructions: testCaseReviewInstructions.trim() || undefined,
+        user_guide_review_instructions: userGuideReviewInstructions.trim() || undefined,
         review_test_cases: reviewTestCases,
         review_user_guide: reviewUserGuide,
         user_guide_url: userGuideUrl.trim() || undefined,
@@ -553,12 +568,15 @@ export const HomePage: React.FC = () => {
             setReviewUserGuide={setReviewUserGuide}
             userGuideUrl={userGuideUrl}
             setUserGuideUrl={setUserGuideUrl}
-            reviewCustomInstructions={reviewCustomInstructions}
-            setReviewCustomInstructions={setReviewCustomInstructions}
+            testCaseReviewInstructions={testCaseReviewInstructions}
+            setTestCaseReviewInstructions={setTestCaseReviewInstructions}
+            userGuideReviewInstructions={userGuideReviewInstructions}
+            setUserGuideReviewInstructions={setUserGuideReviewInstructions}
             jiraIds={jiraIds}
             valueEdgeIds={valueEdgeIds}
             uploadedFiles={uploadedFiles}
             onReviewFilesSelected={handleReviewFilesSelected}
+            onRemoveFile={handleRemoveFile}
             provider={provider}
             model={model}
           />

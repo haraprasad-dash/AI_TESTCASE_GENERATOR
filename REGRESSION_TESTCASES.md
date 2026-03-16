@@ -184,6 +184,26 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: large attachment set and verbose text.
 - Expectation: enhance behavior remains grounded in compact context digest (IDs + limited attachment snippets), not full raw payload bodies.
 
+38. `RG-038` Review upload accepts `.feature` files even with generic browser MIME
+- Endpoint: `POST /api/documents/upload`
+- Input: `.feature` attachment uploaded as `application/octet-stream` or `text/plain`.
+- Expectation: upload succeeds, content is normalized to Gherkin/text handling, and review flow can use the artifact.
+
+39. `RG-039` Review instruction merge preserves shared and mode-specific guidance
+- Function: `app.services.review_service.ReviewService._merged_custom_instructions`
+- Input: shared review instructions plus test-case and user-guide specific instructions.
+- Expectation: merged text includes all applicable instruction blocks with deterministic labels.
+
+40. `RG-040` Mode-specific review instructions count as custom review guidance
+- Function: `app.services.review_service.ReviewService._collect_sources`
+- Input: request with only mode-specific review instructions.
+- Expectation: sources include `custom_instructions` for downstream handling.
+
+41. `RG-041` User-guide review requires URL even when guide file is uploaded
+- Endpoint: `POST /api/review/user-guide`
+- Input: `review_user_guide=true`, uploaded guide file present, no `user_guide_url`.
+- Expectation: request fails with `Please provide user guide URL`.
+
 ## Manual Smoke Checks (recommended)
 
 1. Open UI Settings -> LLM Settings, save valid Groq key, reopen modal.
@@ -203,6 +223,15 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 
 6. Run generation with Groq selected model under normal and rate-limit conditions.
 - Expectation: selected model is preserved across retry attempts; no silent cross-model fallback.
+
+7. Attach a `.feature` file from the Review section using **Attach Review Files**.
+- Expectation: upload succeeds on Windows/browser combinations that send `application/octet-stream` or `text/plain` for `.feature` files.
+
+8. Enable both review modes and enter separate test-case and user-guide instructions.
+- Expectation: each section keeps its own instructions, each Enhance button targets the correct subtype, and review request completes without dropping section instructions.
+
+9. Try running user-guide review with no URL.
+- Expectation: UI blocks submit and backend returns `Please provide user guide URL` if called directly.
 
 ## Regression Gate
 

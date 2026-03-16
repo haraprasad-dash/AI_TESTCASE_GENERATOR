@@ -461,6 +461,36 @@ def test_review_smart_default_questions_include_bdd_excel_and_url_prompts() -> N
     assert "authoritative version" in joined
 
 
+def test_review_service_merges_shared_and_mode_specific_instructions() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        custom_instructions="Shared guidance",
+        test_case_review_instructions="Validate BDD strictly",
+        user_guide_review_instructions="Check prerequisite clarity",
+    )
+
+    merged = service._merged_custom_instructions(inputs)
+
+    assert "Shared guidance" in merged
+    assert "Test Case Review Instructions:" in merged
+    assert "Validate BDD strictly" in merged
+    assert "User Guide Review Instructions:" in merged
+    assert "Check prerequisite clarity" in merged
+
+
+def test_review_service_collect_sources_includes_mode_specific_instructions() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=False,
+        test_case_review_instructions="Focus on duplicate scenarios",
+    )
+
+    sources = service._collect_sources(inputs)
+
+    assert "custom_instructions" in sources
+
+
 def test_review_status_timeout_applies_assumptions_fallback() -> None:
     service = ReviewService()
     review_id = "timeout-case"

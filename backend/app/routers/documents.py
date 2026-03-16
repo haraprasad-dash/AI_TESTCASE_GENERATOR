@@ -1,7 +1,6 @@
 """
 Document upload and processing endpoints.
 """
-import os
 import uuid
 import shutil
 from pathlib import Path
@@ -18,18 +17,56 @@ from app.services.document_parser import (
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 UPLOAD_DIR = Path("./uploads")
-ALLOWED_TYPES = {
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-excel",
-    "text/plain",
-    "text/markdown",
-    "image/png",
-    "image/jpeg",
-    "image/jpg"
+ALLOWED_UPLOADS = {
+    ".pdf": {"application/pdf", "application/octet-stream"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/octet-stream",
+    },
+    ".xlsx": {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/octet-stream",
+    },
+    ".xls": {"application/vnd.ms-excel", "application/octet-stream"},
+    ".txt": {"text/plain", "application/octet-stream"},
+    ".md": {"text/markdown", "text/plain", "application/octet-stream"},
+    ".feature": {"text/plain", "text/x-gherkin", "application/octet-stream"},
+    ".png": {"image/png", "application/octet-stream"},
+    ".jpg": {"image/jpeg", "image/jpg", "application/octet-stream"},
+    ".jpeg": {"image/jpeg", "image/jpg", "application/octet-stream"},
+}
+CANONICAL_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".feature": "text/x-gherkin",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
 }
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
+
+
+def _resolve_content_type(file: UploadFile) -> str:
+    suffix = Path(file.filename or "").suffix.lower()
+    allowed_types = ALLOWED_UPLOADS.get(suffix)
+    if not allowed_types:
+        raise HTTPException(
+            400,
+            "Unsupported file type. Allowed: PDF, DOCX, XLSX, XLS, TXT, MD, FEATURE, PNG, JPG"
+        )
+
+    content_type = (file.content_type or "application/octet-stream").lower()
+    if content_type not in allowed_types:
+        raise HTTPException(
+            400,
+            "Unsupported file type. Allowed: PDF, DOCX, XLSX, XLS, TXT, MD, FEATURE, PNG, JPG"
+        )
+
+    return CANONICAL_CONTENT_TYPES[suffix]
 
 
 @router.post("/upload")
@@ -40,12 +77,7 @@ async def upload_file(file: UploadFile = File(...)):
     Returns:
         File metadata with extracted text
     """
-    # Validate file type
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(
-            400,
-            "Unsupported file type. Allowed: PDF, DOCX, XLSX, TXT, FEATURE"
-        )
+    resolved_content_type = _resolve_content_type(file)
     
     # Generate unique file ID
     file_id = str(uuid.uuid4())
@@ -69,12 +101,12 @@ async def upload_file(file: UploadFile = File(...)):
         
         # Extract text
         parser = get_document_parser()
-        extracted = await parser.parse_file(str(file_path), file.content_type)
+        extracted = await parser.parse_file(str(file_path), resolved_content_type)
         
         return {
             "file_id": file_id,
             "filename": file.filename,
-            "content_type": file.content_type,
+            "content_type": resolved_content_type,
             "size_bytes": file_size,
             "extracted_text": extracted.text,
             "page_count": extracted.page_count

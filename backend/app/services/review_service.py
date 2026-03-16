@@ -73,9 +73,26 @@ class ReviewService:
             sources.append("files")
         if inputs.user_guide_url:
             sources.append("user_guide_url")
-        if inputs.custom_instructions and inputs.custom_instructions.strip():
+        if self._merged_custom_instructions(inputs):
             sources.append("custom_instructions")
         return sources
+
+    def _merged_custom_instructions(self, inputs: ReviewInputs) -> str:
+        sections: List[str] = []
+
+        shared = (inputs.custom_instructions or "").strip()
+        if shared:
+            sections.append(shared)
+
+        test_case_specific = (inputs.test_case_review_instructions or "").strip()
+        if test_case_specific:
+            sections.append(f"Test Case Review Instructions:\n{test_case_specific}")
+
+        user_guide_specific = (inputs.user_guide_review_instructions or "").strip()
+        if user_guide_specific:
+            sections.append(f"User Guide Review Instructions:\n{user_guide_specific}")
+
+        return "\n\n".join(sections).strip()
 
     def _collect_ticket_ids(self, primary_id: str | None, additional_ids: List[str] | None) -> List[str]:
         ids: List[str] = []
@@ -89,7 +106,7 @@ class ReviewService:
         return ids
 
     def _validate_review_request(self, inputs: ReviewInputs) -> None:
-        has_custom = bool(inputs.custom_instructions and inputs.custom_instructions.strip())
+        has_custom = bool(self._merged_custom_instructions(inputs))
         if not (inputs.review_test_cases or inputs.review_user_guide or has_custom):
             raise ReviewValidationError(
                 "Please enable at least one review type or provide custom instructions"
@@ -101,11 +118,8 @@ class ReviewService:
                 raise ReviewValidationError("Please attach test case files (.feature, .xlsx, .txt)")
 
         if inputs.review_user_guide:
-            has_user_guide = bool(inputs.user_guide_url) or any(
-                self._is_user_guide_file(self._file_name(f)) for f in inputs.files
-            )
-            if not has_user_guide:
-                raise ReviewValidationError("Please upload user guide document or provide URL")
+            if not (inputs.user_guide_url and inputs.user_guide_url.strip()):
+                raise ReviewValidationError("Please provide user guide URL")
 
         if inputs.user_guide_url and not self._looks_like_valid_url(inputs.user_guide_url):
             raise ReviewValidationError("Please provide a valid URL")
@@ -149,8 +163,9 @@ class ReviewService:
                 if len(line) >= 20:
                     requirements.append(line)
 
-        if not requirements and inputs.custom_instructions:
-            for line in inputs.custom_instructions.splitlines():
+        merged_instructions = self._merged_custom_instructions(inputs)
+        if not requirements and merged_instructions:
+            for line in merged_instructions.splitlines():
                 line = line.strip()
                 if len(line) >= 20:
                     requirements.append(line)

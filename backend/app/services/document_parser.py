@@ -54,6 +54,7 @@ class DocumentParser:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
         "text/plain": "text",
         "text/markdown": "text",
+        "text/x-gherkin": "text",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
         "application/vnd.ms-excel": "spreadsheet",
         "image/png": "image",

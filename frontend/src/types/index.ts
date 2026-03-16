@@ -114,6 +114,8 @@ export interface ReviewInputs {
   valueedge_ids?: string[];
   files: FileInput[];
   custom_instructions?: string;
+  test_case_review_instructions?: string;
+  user_guide_review_instructions?: string;
   review_test_cases?: boolean;
   review_user_guide?: boolean;
   user_guide_url?: string;

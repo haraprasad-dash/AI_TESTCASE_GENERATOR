@@ -219,6 +219,28 @@
 
 ## 2026-03-13 - Enhance Context Scope Clarification + Full-Type Verification
 
+## 2026-03-16 - Review Attachment Upload Fix
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 20:45 | Traced review attachment failure path | ✅ Complete | Review UI uses generic `/api/documents/upload`; `.feature` files were blocked by strict MIME-only validation |
+| 20:48 | Hardened document upload validation | ✅ Complete | Uploads now validate by allowed extension plus compatible MIME and normalize `.feature` to `text/x-gherkin` |
+| 20:50 | Improved frontend upload error reporting | ✅ Complete | Review and clarification attachment toasts now show backend error detail instead of generic failure |
+| 20:52 | Added regression coverage for `.feature` uploads | ✅ Complete | New API regression cases cover `application/octet-stream` and `text/plain` review uploads |
+| 20:55 | Verification gate | ✅ Complete | Backend regression suite passed (`62 passed`); frontend `npm run build` passed |
+
+## 2026-03-16 - Separate Review Instruction Fields
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 21:10 | Split review instructions into shared and per-mode fields | ✅ Complete | Added shared, test-case, and user-guide review instruction fields in review UI |
+| 21:14 | Preserved backend compatibility via merged instruction block | ✅ Complete | Backend now accepts and deterministically merges shared + mode-specific review instructions |
+| 21:17 | Added regression coverage for instruction merge | ✅ Complete | New unit tests cover merged instruction content and source detection |
+| 21:20 | Verification gate | ✅ Complete | Backend regression suite passed (`64 passed`); frontend `npm run build` passed |
+| 21:28 | Split review modes into separate UI sections | ✅ Complete | Test Case Review and User Guide Review now render as distinct cards with dedicated fields per section |
+| 21:35 | Enforced URL-only user-guide review rule | ✅ Complete | Backend now requires `user_guide_url` when user-guide review is enabled; files are no longer accepted as standalone guide source |
+| 21:45 | Final verification after strict review-mode updates | ✅ Complete | Backend regression suite passed (`65 passed`); frontend `npm run build` passed |
+
 | Time | Activity | Status | Notes |
 |------|----------|--------|-------|
 | 18:35 | Clarified enhance context scope in docs | ✅ Complete | README/AGENTS now explicitly state compact context digest behavior (first 8 files + trimmed snippets), not full raw document bodies |

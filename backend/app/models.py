@@ -154,6 +154,8 @@ class ReviewInputs(BaseModel):
     valueedge_ids: List[str] = []
     files: List[FileInput] = []
     custom_instructions: Optional[str] = None
+    test_case_review_instructions: Optional[str] = None
+    user_guide_review_instructions: Optional[str] = None
     review_test_cases: bool = True
     review_user_guide: bool = True
     user_guide_url: Optional[str] = None

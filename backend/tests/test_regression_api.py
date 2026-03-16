@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import GenerationResponse, GenerationOutputs, GenerationMetadata
+from app.routers import documents as documents_router
 from app.routers import generation as generation_router
 from app.routers import llm as llm_router
 
@@ -445,6 +446,7 @@ def test_enhance_prompt_review_rewrites_generation_style_output(monkeypatch) -> 
 def _review_inputs_with_artifacts() -> dict:
     return {
         "jira_id": "PROJ-101",
+        "user_guide_url": "https://example.com/user-guide",
         "files": [
             {
                 "filename": "login_test_cases.feature",
@@ -556,3 +558,64 @@ def test_review_user_guide_rejects_invalid_url() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Please provide a valid URL"
+
+
+def test_review_user_guide_requires_url_even_with_uploaded_guide_file() -> None:
+    response = client.post(
+        "/api/review/user-guide",
+        json={
+            "inputs": {
+                "review_test_cases": False,
+                "review_user_guide": True,
+                "files": [
+                    {
+                        "filename": "user_guide.md",
+                        "extracted_text": "# User Guide\nSetup instructions",
+                        "content_type": "text/markdown",
+                    }
+                ],
+            },
+            "configuration": {"provider": "groq"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Please provide user guide URL"
+
+
+def test_documents_upload_accepts_feature_file_with_generic_mime(monkeypatch, tmp_path) -> None:
+    class DummyParser:
+        async def parse_file(self, file_path, content_type):
+            assert content_type == "text/x-gherkin"
+            return SimpleNamespace(text="Feature: Theme settings", page_count=1)
+
+    monkeypatch.setattr(documents_router, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(documents_router, "get_document_parser", lambda: DummyParser())
+
+    response = client.post(
+        "/api/documents/upload",
+        files={"file": ("theme_setting.feature", b"Feature: Theme settings", "application/octet-stream")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filename"] == "theme_setting.feature"
+    assert body["content_type"] == "text/x-gherkin"
+
+
+def test_documents_upload_accepts_feature_file_with_text_plain_mime(monkeypatch, tmp_path) -> None:
+    class DummyParser:
+        async def parse_file(self, file_path, content_type):
+            assert content_type == "text/x-gherkin"
+            return SimpleNamespace(text="Scenario: Save theme", page_count=1)
+
+    monkeypatch.setattr(documents_router, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(documents_router, "get_document_parser", lambda: DummyParser())
+
+    response = client.post(
+        "/api/documents/upload",
+        files={"file": ("theme_setting.feature", b"Scenario: Save theme", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content_type"] == "text/x-gherkin"

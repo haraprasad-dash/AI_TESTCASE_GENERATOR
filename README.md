@@ -369,17 +369,24 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 
 ### Review Custom Instructions Enhancer
 
-- Located under **Review Custom Instructions (optional)** in the Review section
+- Located under the per-mode review instruction fields in the Review section
 - Uses the same AI configuration selected in UI (provider + model)
 - Calls `POST /api/llm/enhance-prompt` and replaces the textarea content with the enhanced version
 - Disabled when instructions are empty; shows loading state while enhancement is in progress
+
+### Review Instruction Fields
+
+- **Test Case Review Section** has its own mode toggle, instructions field, and file attachment area
+- **User Guide Review Section** has its own mode toggle, URL field, and instructions field
+- **Test Case Review** requires attached test case files
+- **User Guide Review** requires a valid guide URL
 
 ### Context-Aware Enhance (Plan / Case / Review)
 
 - Enhance is section-aware and context-aware:
    - **Test Plan Prompt Enhance** uses generation context (`jira_ids`, `valueedge_ids`, uploaded file snippets, template toggle state)
    - **Test Case Prompt Enhance** uses the same generation context but applies testcase-focused enhancement rules
-   - **Review Enhance** auto-selects subtype (`review_test_cases`, `review_user_guide`, or mixed review) and uses review context (modes, guide URL, files, source IDs)
+   - **Per-mode Review Enhance** uses fixed subtype targeting for test-case or user-guide review fields
 - Context scope note (important):
    - enhance uses a **compact context digest**, not full raw payload text
    - only the first 8 attachments are passed for enhance context
@@ -441,6 +448,8 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 | JPG/JPEG | .jpg | Tesseract OCR |
 
 Max file size: 20MB per file. Max 5 files per generation.
+
+`.feature` uploads are accepted by extension, including Windows/browser combinations that report them as generic text or octet-stream files.
 
 ---
 
