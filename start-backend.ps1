@@ -1,14 +1,31 @@
 # Start Backend Script
 $env:PYTHONIOENCODING = "utf-8"
-Set-Location "$PSScriptRoot\backend"
+$repoRoot = $PSScriptRoot
+$backendRoot = Join-Path $repoRoot "backend"
+$pythonCandidates = @(
+	(Join-Path $repoRoot ".venv\Scripts\python.exe"),
+	(Join-Path $backendRoot "venv\Scripts\python.exe")
+)
+$pythonExe = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $pythonExe) {
+	Write-Error "Python environment not found. Run .\setup.ps1 from the repository root first."
+	exit 1
+}
+
+Set-Location $backendRoot
+
+if (-not (Test-Path ".env")) {
+	Write-Warning "backend/.env was not found. Add GROQ_API_KEY and other settings before using the app."
+}
 
 # Clean up stale backend listeners that can leave old code serving on port 7010.
 try {
 	$listeners = Get-NetTCPConnection -LocalPort 7010 -State Listen -ErrorAction SilentlyContinue |
 		Select-Object -ExpandProperty OwningProcess -Unique
-	foreach ($pid in $listeners) {
-		if ($pid) {
-			Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+	foreach ($listenerPid in $listeners) {
+		if ($listenerPid) {
+			Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
 		}
 	}
 } catch {
@@ -31,4 +48,4 @@ try {
 }
 
 Start-Sleep -Seconds 1
-& ".\venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 7010
+& $pythonExe -m uvicorn app.main:app --host 0.0.0.0 --port 7010

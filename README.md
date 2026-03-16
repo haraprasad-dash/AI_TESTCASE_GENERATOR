@@ -31,18 +31,25 @@
 
 ## ⚡ Quick Start (TL;DR)
 
-```powershell
-# Terminal 1 — Backend (port 7010)
-cd backend
-.\venv\Scripts\Activate.ps1
-uvicorn app.main:app --host 127.0.0.1 --port 7010
+For teammates who already cloned the repo, use the same steps on every machine:
 
-# Terminal 2 — Frontend (port 3000)
-cd frontend
-npm run dev
+```powershell
+# One-time setup
+.\setup.ps1
+
+# Terminal 1 — Backend
+.\start-backend.ps1
+
+# Terminal 2 — Frontend
+.\start-frontend.ps1
 ```
 
 Open **http://localhost:3000** in your browser.
+
+Requirements:
+
+- Add `GROQ_API_KEY=...` to `backend/.env`
+- Keep `frontend/.env` as `VITE_API_URL=`
 
 > **Windows Note:** Ports 8000 and 8080 are reserved by Windows `svchost`. Use backend port **7010**.  
 > **Critical:** `frontend/.env` must have `VITE_API_URL=` (empty value) so all requests route through the Vite proxy.
@@ -130,6 +137,23 @@ The backend auto-detects Scoop-installed paths — no manual configuration neede
 
 ### Local Development Setup
 
+### Team Setup On A New Machine
+
+If you already cloned the repo, the fastest path is:
+
+```powershell
+.\setup.ps1
+```
+
+Then create `backend/.env` with your team credentials and start the app with:
+
+```powershell
+.\start-backend.ps1
+.\start-frontend.ps1
+```
+
+### Manual Setup Details
+
 #### 1. Clone the Repository
 
 ```bash
@@ -137,28 +161,20 @@ git clone https://github.com/haraprasad-dash/AI_TESTCASE_GENERATOR.git
 cd AI_TESTCASE_GENERATOR
 ```
 
-#### 2. Backend Setup
+#### 2. One-Time Setup
 
 ```powershell
-cd backend
-
-# Create and activate virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1   # Windows PowerShell
-# source venv/bin/activate    # macOS/Linux
-
-# Install dependencies
-pip install -r requirements.txt
+.\setup.ps1
 ```
 
-#### 3. Frontend Setup
+This script:
 
-```bash
-cd ../frontend
-npm install
-```
+- Creates the root `.venv` if it does not exist
+- Installs backend Python dependencies from `backend/requirements.txt`
+- Installs frontend npm dependencies
+- Creates `frontend/.env` with `VITE_API_URL=` if it is missing
 
-#### 4. Configure Environment Variables
+#### 3. Configure Environment Variables
 
 Create `backend/.env`:
 
@@ -185,20 +201,17 @@ VITE_API_URL=
 
 > ⚠️ **`VITE_API_URL` must be empty.** Setting it to any URL (e.g. `http://localhost:5000`) bypasses the Vite proxy and breaks all API calls.
 
-#### 5. Start the Application
+#### 4. Start the Application
 
 ```powershell
 # Terminal 1 — Backend
-cd backend
-.\venv\Scripts\Activate.ps1
-uvicorn app.main:app --host 127.0.0.1 --port 7010
+.\start-backend.ps1
 
 # Terminal 2 — Frontend
-cd frontend
-npm run dev
+.\start-frontend.ps1
 ```
 
-#### 6. Access the Application
+#### 5. Access the Application
 
 | Service | URL |
 |---------|-----|
