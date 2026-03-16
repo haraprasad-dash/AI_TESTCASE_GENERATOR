@@ -432,6 +432,7 @@ def test_review_validation_requires_one_mode_or_custom_instruction() -> None:
 def test_review_clarification_questions_are_bounded_and_non_duplicate() -> None:
     service = ReviewService()
     questions = service._clarification_questions(
+        review_type="both",
         reqs=["Short requirement"],
         test_case_text="TODO TBD etc",
         guide_text="Guide without prerequisites",
@@ -453,12 +454,302 @@ def test_review_smart_default_questions_include_bdd_excel_and_url_prompts() -> N
         ],
     )
 
-    questions = service._smart_default_questions(inputs, "Test ID,Name\nTC-1,Login")
+    questions = service._smart_default_questions("both", inputs, "Test ID,Name\nTC-1,Login")
     joined = " ".join(questions)
     assert "Gherkin" in joined
     assert "Test ID" in joined
     assert "latest version" in joined
     assert "authoritative version" in joined
+
+
+def test_review_user_guide_questions_skip_test_case_specific_prompts() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/guide",
+        files=[{"filename": "suite.feature", "extracted_text": "Scenario: login TODO"}],
+    )
+
+    questions = service._smart_default_questions("user-guide", inputs, "Scenario: login TODO")
+
+    assert all("Gherkin" not in question for question in questions)
+
+
+def test_review_answered_clarifications_are_not_repeated() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/theme-guide",
+        files=[
+            {"filename": "theme-guide.md", "extracted_text": "# Theme Settings\nColor update steps."},
+        ],
+        clarification_history=[
+            {
+                "questions": [
+                    "User guide appears to miss prerequisites. Can you provide the required preconditions?",
+                    "Is this the latest version of the guide URL provided?",
+                ],
+                "answer": "no preconditions. yes this is latest version",
+            }
+        ],
+    )
+
+    result = service.review("user-guide", inputs)
+
+    assert result.status == "completed"
+    assert result.metadata.clarification_questions == []
+
+
+def test_review_clarification_answer_without_question_history_does_not_loop() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/theme-guide",
+        files=[
+            {"filename": "theme-guide.md", "extracted_text": "# Theme guide\nSetup steps"},
+        ],
+        clarification_history=[
+            {
+                "questions": [],
+                "answer": "no preconditions. yes this is latest version",
+            }
+        ],
+    )
+
+    result = service.review("user-guide", inputs)
+
+    assert result.status == "completed"
+    assert result.metadata.clarification_required is False
+    assert result.metadata.clarification_questions == []
+
+
+def test_review_user_guide_report_uses_actual_section_titles() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/theme-guide",
+        files=[
+            {
+                "filename": "theme-guide.md",
+                "extracted_text": "# Theme Settings\n## Header Colors\nUpdate the header text color from settings.",
+            }
+        ],
+        clarification_history=[
+            {
+                "questions": ["User guide appears to miss prerequisites. Can you provide the required preconditions?"],
+                "answer": "no preconditions",
+            }
+        ],
+    )
+
+    result = service.review("user-guide", inputs)
+
+    assert "Theme Settings" in result.report_markdown
+    assert "Customer-Facing Assessment" in result.report_markdown
+    assert "Core workflow" not in result.report_markdown
+
+
+def test_review_user_guide_reports_line_level_modification_references() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/theme-guide",
+        files=[
+            {
+                "filename": "theme-guide.md",
+                "extracted_text": "# Theme Settings\n1. Open Theme Settings\n2. Update header color etc\n3. Save changes",
+            }
+        ],
+        clarification_history=[
+            {
+                "questions": ["User guide appears to miss prerequisites. Can you provide the required preconditions?"],
+                "answer": "no preconditions",
+            }
+        ],
+    )
+
+    result = service.review("user-guide", inputs)
+    guide_payload = result.report_json.get("user_guide_review", {})
+    modifications = guide_payload.get("modification_recommendations", [])
+
+    assert any(row.get("line_reference") == "L3" for row in modifications)
+    assert guide_payload.get("summary", {}).get("quality_score") is not None
+    assert "Line to modify: L3" in result.report_markdown
+
+
+def test_review_user_guide_template_mode_differs_from_instruction_only_mode() -> None:
+    service = ReviewService()
+
+    shared_payload = {
+        "review_test_cases": False,
+        "user_guide_url": "https://example.com/theme-guide",
+        "files": [
+            {
+                "filename": "theme-guide.md",
+                "extracted_text": "# Theme Settings\nUpdate color setting.",
+            }
+        ],
+        "user_guide_review_instructions": "Focus on customer clarity and examples",
+    }
+
+    template_enabled = ReviewInputs(
+        **shared_payload,
+        review_user_guide=True,
+    )
+    template_disabled = ReviewInputs(
+        **shared_payload,
+        review_user_guide=False,
+    )
+
+    enabled_result = service.review("user-guide", template_enabled)
+    disabled_result = service.review("user-guide", template_disabled)
+
+    enabled_summary = enabled_result.report_json.get("user_guide_review", {}).get("summary", {})
+    disabled_summary = disabled_result.report_json.get("user_guide_review", {}).get("summary", {})
+
+    assert enabled_summary.get("review_mode") == "template_guided"
+    assert disabled_summary.get("review_mode") == "instruction_only"
+    assert enabled_summary.get("missing", 0) >= disabled_summary.get("missing", 0)
+
+
+def test_review_test_case_template_mode_is_reported() -> None:
+    service = ReviewService()
+
+    inputs = ReviewInputs(
+        review_test_cases=True,
+        review_user_guide=False,
+        files=[
+            {
+                "filename": "suite.feature",
+                "extracted_text": "Feature: Login\nScenario: Success login\nGiven user enters credentials\nWhen user submits\nThen login works",
+            }
+        ],
+        jira_id="PROJ-1",
+    )
+
+    result = service.review("test-cases", inputs)
+    summary = result.report_json.get("test_case_review", {}).get("summary", {})
+
+    assert summary.get("review_mode") == "template_guided"
+
+
+def test_review_user_guide_custom_instruction_changes_output() -> None:
+    service = ReviewService()
+
+    without_instruction = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/guide",
+        files=[
+            {
+                "filename": "guide.md",
+                "extracted_text": "# Theme Settings\nSteps to change color.",
+            }
+        ],
+    )
+    with_instruction = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/guide",
+        user_guide_review_instructions="Include accessibility guidance and troubleshooting section with recovery steps",
+        files=[
+            {
+                "filename": "guide.md",
+                "extracted_text": "# Theme Settings\nSteps to change color.",
+            }
+        ],
+    )
+
+    base_result = service.review("user-guide", without_instruction)
+    instruction_result = service.review("user-guide", with_instruction)
+
+    base_summary = base_result.report_json.get("user_guide_review", {}).get("summary", {})
+    instruction_summary = instruction_result.report_json.get("user_guide_review", {}).get("summary", {})
+
+    assert instruction_summary.get("instruction_influence_count", 0) > 0
+    assert instruction_summary.get("missing", 0) >= base_summary.get("missing", 0)
+    assert "Custom review instructions" in instruction_result.report_markdown
+
+
+def test_review_test_case_custom_instruction_changes_output() -> None:
+    service = ReviewService()
+
+    without_instruction = ReviewInputs(
+        review_test_cases=True,
+        review_user_guide=False,
+        jira_id="PROJ-1",
+        files=[
+            {
+                "filename": "suite.feature",
+                "extracted_text": "Feature: Login\nScenario: Successful login\nGiven valid credentials\nWhen user logs in\nThen dashboard is shown",
+            }
+        ],
+    )
+    with_instruction = ReviewInputs(
+        review_test_cases=True,
+        review_user_guide=False,
+        jira_id="PROJ-1",
+        test_case_review_instructions="Include boundary conditions for username length and invalid credential handling",
+        files=[
+            {
+                "filename": "suite.feature",
+                "extracted_text": "Feature: Login\nScenario: Successful login\nGiven valid credentials\nWhen user logs in\nThen dashboard is shown",
+            }
+        ],
+    )
+
+    base_result = service.review("test-cases", without_instruction)
+    instruction_result = service.review("test-cases", with_instruction)
+
+    base_summary = base_result.report_json.get("test_case_review", {}).get("summary", {})
+    instruction_summary = instruction_result.report_json.get("test_case_review", {}).get("summary", {})
+
+    assert instruction_summary.get("instruction_influence_count", 0) > 0
+    assert len(instruction_result.report_json.get("test_case_review", {}).get("critical_gaps", [])) >= len(
+        base_result.report_json.get("test_case_review", {}).get("critical_gaps", [])
+    )
+
+
+def test_review_custom_instruction_adds_instruction_specific_clarification_question() -> None:
+    service = ReviewService()
+
+    with_instruction = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/guide",
+        user_guide_review_instructions="Include accessibility troubleshooting recovery guidance",
+        files=[
+            {
+                "filename": "guide.md",
+                "extracted_text": "# Theme Settings\n1. Open settings\n2. Change color\n3. Save",
+            }
+        ],
+    )
+    without_instruction = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        user_guide_url="https://example.com/guide",
+        files=[
+            {
+                "filename": "guide.md",
+                "extracted_text": "# Theme Settings\n1. Open settings\n2. Change color\n3. Save",
+            }
+        ],
+    )
+
+    with_result = service.review("user-guide", with_instruction)
+    without_result = service.review("user-guide", without_instruction)
+
+    joined_with = " ".join(with_result.metadata.clarification_questions)
+    joined_without = " ".join(without_result.metadata.clarification_questions)
+
+    assert "Custom instruction" in joined_with
+    assert "Custom instruction" not in joined_without
 
 
 def test_review_service_merges_shared_and_mode_specific_instructions() -> None:

@@ -204,6 +204,46 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: `review_user_guide=true`, uploaded guide file present, no `user_guide_url`.
 - Expectation: request fails with `Please provide user guide URL`.
 
+42. `RG-042` User-guide review does not ask test-case-only clarification questions
+- Endpoint: `POST /api/review/user-guide`
+- Input: guide URL plus uploaded `.feature` reference file and guide document.
+- Expectation: clarification questions can ask about guide completeness/version, but must not ask Gherkin or test-case expected-result questions.
+
+43. `RG-043` Answered clarification questions are not repeated
+- Function: `app.services.review_service.ReviewService.review`
+- Input: second-round user-guide review request carrying prior `clarification_history` answers.
+- Expectation: previously answered questions are filtered out from the next clarification round.
+
+44. `RG-044` Clarification answer with empty question-history does not loop
+- Function: `app.services.review_service.ReviewService.review`
+- Input: `clarification_history` has answer text but empty question array.
+- Expectation: review completes without repeating the same clarification loop.
+
+45. `RG-045` User-guide report includes clarification-applied summary
+- Function: `app.services.review_service.ReviewService.review`
+- Input: completed review with submitted clarification history.
+- Expectation: final report contains `Clarification Applied` section with round count and latest answer considered.
+
+46. `RG-046` User-guide report includes testcase-driven focus-gap checks
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide review with reference `.feature` content focused on specific capability.
+- Expectation: report includes focus terms and targeted missing topics tied to testcase obligations (defaults, validation, picker, upgrade) when absent in guide.
+
+47. `RG-047` User-guide report includes line-level modification references and quality score
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide content containing ambiguous terms (e.g., `etc`) and clarification history.
+- Expectation: payload includes `summary.quality_score` and `modification_recommendations[*].line_reference`; markdown includes explicit `Line to modify: Lx` guidance.
+
+48. `RG-048` Review template toggle materially changes review mode
+- Function: `app.services.review_service.ReviewService.review`
+- Input: same user-guide input with template enabled (`review_user_guide=true`) vs disabled (`review_user_guide=false`) plus instructions.
+- Expectation: summary includes distinct `review_mode` values (`template_guided` vs `instruction_only`) and template-guided mode applies broader checklist gaps.
+
+49. `RG-049` Test-case review summary exposes active mode
+- Function: `app.services.review_service.ReviewService.review`
+- Input: test-case review with template enabled.
+- Expectation: `report_json.test_case_review.summary.review_mode == template_guided`.
+
 ## Manual Smoke Checks (recommended)
 
 1. Open UI Settings -> LLM Settings, save valid Groq key, reopen modal.
@@ -232,6 +272,15 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 
 9. Try running user-guide review with no URL.
 - Expectation: UI blocks submit and backend returns `Please provide user guide URL` if called directly.
+
+10. In **User Guide Review Section**, attach optional reference files and run user-guide review with a valid URL.
+- Expectation: upload succeeds, the files remain visible in the user-guide card, and review uses them as context without turning the request into test-case review.
+
+11. Answer a user-guide clarification round, then submit follow-up clarification.
+- Expectation: already answered questions do not reappear unless new unanswered ambiguity is introduced.
+
+12. Run **Review User Guide** on a concise guide with ambiguous phrases (`etc`, `TBD`, `as needed`).
+- Expectation: output shows a structured quality summary and line-level modification cards with suggested rewrites.
 
 ## Regression Gate
 

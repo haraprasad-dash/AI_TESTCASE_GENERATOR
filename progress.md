@@ -241,8 +241,47 @@
 | 21:35 | Enforced URL-only user-guide review rule | ✅ Complete | Backend now requires `user_guide_url` when user-guide review is enabled; files are no longer accepted as standalone guide source |
 | 21:45 | Final verification after strict review-mode updates | ✅ Complete | Backend regression suite passed (`65 passed`); frontend `npm run build` passed |
 
+## 2026-03-16 - Review Clarification Scope And Guide Reference Fixes
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 22:05 | Scoped review payloads to selected action button | ✅ Complete | `Review User Guide` no longer sends test-case mode flags when that checkbox is also enabled in UI |
+| 22:12 | Added user-guide reference file upload area | ✅ Complete | User Guide Review section now accepts optional `.pdf`, `.docx`, `.txt`, `.md` files for review context |
+| 22:20 | Filtered clarification questions by review mode and answered history | ✅ Complete | User-guide review no longer asks Gherkin/test-case questions; answered clarifications are not repeated |
+| 22:28 | Replaced static user-guide placeholder output | ✅ Complete | Guide review report now derives section titles/findings from actual uploaded guide content and clarification context |
+| 22:32 | Verification gate | ✅ Complete | Backend regression suite passed (`69 passed`); frontend `npm run build` passed |
+
+## 2026-03-16 - Review Quality And Clarification Finalization Improvements
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 22:40 | Hardened clarification loop resolution | ✅ Complete | Clarification answer text now suppresses repeated prompts even with incomplete question history payloads |
+| 22:47 | Added explicit clarification-applied report section | ✅ Complete | Final report now records clarification rounds and latest answer considered |
+| 22:55 | Improved user-guide quality checks with testcase focus obligations | ✅ Complete | Added focused gap detection for feature-driven topics (header text color defaults, hex validation, color picker, upgrade behavior) |
+| 23:02 | Improved review status refresh UX feedback | ✅ Complete | Refresh Status now shows status-success and actionable error feedback in UI |
+| 23:06 | Verification gate | ✅ Complete | Backend regression suite passed (`70 passed`); frontend `npm run build` passed |
+
 | Time | Activity | Status | Notes |
 |------|----------|--------|-------|
 | 18:35 | Clarified enhance context scope in docs | ✅ Complete | README/AGENTS now explicitly state compact context digest behavior (first 8 files + trimmed snippets), not full raw document bodies |
 | 18:38 | Expanded enhance regression coverage to all prompt types | ✅ Complete | Added enhance alignment checks for `test_case` and generic `review` in API regression suite |
 | 18:40 | Ran enhance-focused + full backend regressions | ✅ Complete | Enhance-only: `6 passed`; full backend regression: `60 passed` |
+
+## 2026-03-16 - User Guide Review Intelligence + Output UX Upgrade
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 23:20 | Deepened user-guide review analysis logic | ✅ Complete | Added deterministic quality scoring, ambiguity detection, and richer payload structure (`strengths`, `missing_topics`, `modification_recommendations`) |
+| 23:24 | Added line-level modification guidance | ✅ Complete | Modification findings now include explicit `Lx` references, current text snippets, and suggested rewrites |
+| 23:28 | Upgraded review output presentation | ✅ Complete | Review output now renders structured cards for grade/score/modifications/missing-topics and markdown details in a collapsible section |
+| 23:31 | Added regression coverage for line-level guidance | ✅ Complete | Added `test_review_user_guide_reports_line_level_modification_references` and documented `RG-047` |
+
+## 2026-03-16 - Template-Aware Review Mode Validation
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 23:45 | Root-caused template toggle parity issue in review flow | ✅ Complete | Template flags were mostly used for validation; analysis depth remained similar |
+| 23:49 | Implemented template-aware review logic using skill checklists | ✅ Complete | Review now loads `skill-prompt-userguide-review.md` and `skill-prompt-testcase-review.md` for template-guided mandatory checks |
+| 23:52 | Added explicit review mode output | ✅ Complete | `report_json.*.summary.review_mode` now exposes `template_guided` vs `instruction_only` and UI displays mode |
+| 23:55 | Added regression tests for mode differentiation | ✅ Complete | Added tests validating mode value and behavior divergence |
+| 23:57 | Verification gate | ✅ Complete | Backend regression: `73 passed`; frontend build successful |

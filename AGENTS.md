@@ -236,8 +236,22 @@ This workspace now includes production-facing implementation artifacts in additi
 
 - Multi-round clarification with history tracking
 - Smart default questions (BDD strictness, Excel Test ID column, URL freshness, multi-source version alignment)
+- Instruction-aware clarification prompts (custom instruction mismatches now generate explicit clarification prompts)
+- Previously answered clarification prompts are filtered out across rounds (history-driven de-dup)
 - Clarification attachment uploads
 - Timeout fallback on status polling (best-effort assumptions after 30 minutes)
+
+### Review Mode + Instruction Impact (Implemented)
+
+- Review outputs now expose explicit mode in summary:
+   - `template_guided`
+   - `instruction_only`
+- Template-guided mode loads repository review skills as checklist signals:
+   - `skill-prompt-userguide-review.md`
+   - `skill-prompt-testcase-review.md`
+- Custom instructions now produce measurable impact in review payload:
+   - `instruction_influence_count`
+   - `instruction_checks` (`matched` / `missing`)
 
 ### Multi-Source Input Behavior (Implemented)
 

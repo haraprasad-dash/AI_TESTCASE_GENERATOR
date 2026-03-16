@@ -377,9 +377,14 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 ### Review Instruction Fields
 
 - **Test Case Review Section** has its own mode toggle, instructions field, and file attachment area
-- **User Guide Review Section** has its own mode toggle, URL field, and instructions field
+- **User Guide Review Section** has its own mode toggle, URL field, optional reference-file attachment area, and instructions field
 - **Test Case Review** requires attached test case files
 - **User Guide Review** requires a valid guide URL
+- **User Guide Review** can also include uploaded reference files (`.pdf`, `.docx`, `.txt`, `.md`) for additional context
+- **Template Enabled vs Disabled behavior is now explicit**:
+   - Template enabled (`review_* = true`) => template-guided checklist review using system review skill prompts
+   - Template disabled + instructions => instruction-only review mode
+   - Output now shows current mode in Review Results (`template_guided` / `instruction_only`)
 
 ### Context-Aware Enhance (Plan / Case / Review)
 
@@ -402,10 +407,23 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 ### Review Clarification UX
 
 - Partial results are shown while clarification is pending
+- Clarification questions are scoped to the selected review mode, so user-guide review does not ask test-case-only questions
 - Clarification templates are available for quick responses
 - Clarification history is preserved and editable across rounds
+- Previously answered clarification questions are not repeated in the next round
 - Additional files can be attached during clarification
 - Max clarification rounds: 3 (then best-effort assumptions are applied)
+- Completed reports include a **Clarification Applied** summary so final output explicitly reflects submitted clarification answers
+- **Refresh Status** now returns user feedback (current status or actionable error when session is missing)
+
+### User Guide Review Quality Signals
+
+- User-guide review now checks URL content and testcase-derived focus terms when available
+- For testcase-guided review (e.g., `Agent interface header text color`), missing-topic findings include targeted gaps such as default color behavior, validation rules, color picker behavior, and upgrade compatibility notes
+- Review output now includes a structured summary dashboard (grade, quality score, missing/modification counts) instead of plain raw text only
+- For modification findings, review now reports **line-level pointers** (e.g., `L12`) with current text and suggested rewrite guidance
+- Ambiguous phrases (e.g., `TBD`, `etc`, `as needed`) are flagged as high-priority rewrite items with deterministic correction guidance
+- When template mode is enabled, additional mandatory checklist gaps are evaluated from repository skills (`skill-prompt-userguide-review.md`, `skill-prompt-testcase-review.md`)
 
 ### Review Endpoints
 

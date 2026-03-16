@@ -39,6 +39,7 @@ export const HomePage: React.FC = () => {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRefreshingReview, setIsRefreshingReview] = useState(false);
   const [output, setOutput] = useState<GenerationResponse | null>(null);
   const [reviewOutput, setReviewOutput] = useState<ReviewResponse | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -63,17 +64,8 @@ export const HomePage: React.FC = () => {
   const [userGuideUrl, setUserGuideUrl] = useState('');
   const [testCaseReviewInstructions, setTestCaseReviewInstructions] = useState('');
   const [userGuideReviewInstructions, setUserGuideReviewInstructions] = useState('');
-
-  const buildMergedReviewInstructions = () => {
-    const sections: string[] = [];
-    if (reviewTestCases && testCaseReviewInstructions.trim()) {
-      sections.push(`Test Case Review Instructions:\n${testCaseReviewInstructions.trim()}`);
-    }
-    if (reviewUserGuide && userGuideReviewInstructions.trim()) {
-      sections.push(`User Guide Review Instructions:\n${userGuideReviewInstructions.trim()}`);
-    }
-    return sections.filter(Boolean).join('\n\n');
-  };
+  const [reviewTestCaseFileIds, setReviewTestCaseFileIds] = useState<string[]>([]);
+  const [userGuideReferenceFileIds, setUserGuideReferenceFileIds] = useState<string[]>([]);
 
   const hasGenerationInput = Boolean(
     jiraIds.length > 0 ||
@@ -94,13 +86,20 @@ export const HomePage: React.FC = () => {
 
   const handleRemoveFile = (fileId: string) => {
     setUploadedFiles((prev) => prev.filter((f) => f.file_id !== fileId));
+    setReviewTestCaseFileIds((prev) => prev.filter((id) => id !== fileId));
+    setUserGuideReferenceFileIds((prev) => prev.filter((id) => id !== fileId));
   };
 
-  const handleReviewFilesSelected = async (files: FileList) => {
+  const handleReviewFilesSelected = async (files: FileList, scope: 'test-cases' | 'user-guide') => {
     for (const file of Array.from(files)) {
       try {
         const response = await api.uploadFile(file);
         setUploadedFiles((prev) => [...prev, response.data]);
+        if (scope === 'test-cases') {
+          setReviewTestCaseFileIds((prev) => prev.includes(response.data.file_id) ? prev : [...prev, response.data.file_id]);
+        } else {
+          setUserGuideReferenceFileIds((prev) => prev.includes(response.data.file_id) ? prev : [...prev, response.data.file_id]);
+        }
         toast.success(`Attached for review: ${file.name}`);
       } catch (error: any) {
         toast.error(error.response?.data?.detail || `Failed to attach ${file.name}`);
@@ -252,19 +251,34 @@ export const HomePage: React.FC = () => {
   const isTestCaseArtifact = (filename: string) => /\.(feature|xlsx|xls|txt|md)$/i.test(filename);
 
   const validateReviewRequest = (reviewMode: 'test-cases' | 'user-guide' | 'both') => {
-    const hasCustomInstructions = Boolean(
-      testCaseReviewInstructions.trim() ||
-      userGuideReviewInstructions.trim()
-    );
-    const enableTestCaseReview = reviewMode === 'test-cases' || reviewMode === 'both' ? reviewTestCases : false;
-    const enableUserGuideReview = reviewMode === 'user-guide' || reviewMode === 'both' ? reviewUserGuide : false;
+    const includeTestCaseSection = reviewMode === 'test-cases' || reviewMode === 'both';
+    const includeUserGuideSection = reviewMode === 'user-guide' || reviewMode === 'both';
 
-    if (!enableTestCaseReview && !enableUserGuideReview && !hasCustomInstructions) {
-      toast.error('Please enable at least one review type or provide custom instructions');
+    const testCaseInstructions = includeTestCaseSection ? testCaseReviewInstructions.trim() : '';
+    const userGuideInstructions = includeUserGuideSection ? userGuideReviewInstructions.trim() : '';
+
+    const enableTestCaseTemplate = includeTestCaseSection && reviewTestCases;
+    const enableUserGuideTemplate = includeUserGuideSection && reviewUserGuide;
+
+    const hasTestCaseInstructionOnly = includeTestCaseSection && !enableTestCaseTemplate && Boolean(testCaseInstructions);
+    const hasUserGuideInstructionOnly = includeUserGuideSection && !enableUserGuideTemplate && Boolean(userGuideInstructions);
+
+    if (includeTestCaseSection && !enableTestCaseTemplate && !hasTestCaseInstructionOnly && reviewMode === 'test-cases') {
+      toast.error('Enable Test Case template or provide Test Case Review Instructions');
       return false;
     }
 
-    if (enableTestCaseReview) {
+    if (includeUserGuideSection && !enableUserGuideTemplate && !hasUserGuideInstructionOnly && reviewMode === 'user-guide') {
+      toast.error('Enable User Guide template or provide User Guide Review Instructions');
+      return false;
+    }
+
+    if (!enableTestCaseTemplate && !enableUserGuideTemplate && !hasTestCaseInstructionOnly && !hasUserGuideInstructionOnly) {
+      toast.error('Please enable a review template or provide review instructions');
+      return false;
+    }
+
+    if (enableTestCaseTemplate) {
       const hasTestCaseFiles = uploadedFiles.some((file) => isTestCaseArtifact(file.filename));
       if (!hasTestCaseFiles) {
         toast.error('Please attach test case files (.feature, .xlsx, .txt)');
@@ -272,7 +286,7 @@ export const HomePage: React.FC = () => {
       }
     }
 
-    if (enableUserGuideReview) {
+    if (includeUserGuideSection && (enableUserGuideTemplate || hasUserGuideInstructionOnly)) {
       if (!userGuideUrl.trim()) {
         toast.error('Please provide user guide URL');
         return false;
@@ -295,7 +309,24 @@ export const HomePage: React.FC = () => {
     return true;
   };
 
-  const buildReviewPayload = (): { inputs: ReviewInputs; configuration: ReviewConfiguration } => {
+  const buildReviewPayload = (reviewMode: 'test-cases' | 'user-guide' | 'both'): { inputs: ReviewInputs; configuration: ReviewConfiguration } => {
+    const includeTestCaseReview = reviewMode === 'test-cases' || reviewMode === 'both';
+    const includeUserGuideReview = reviewMode === 'user-guide' || reviewMode === 'both';
+    const testCaseInstructions = includeTestCaseReview ? testCaseReviewInstructions.trim() : '';
+    const userGuideInstructions = includeUserGuideReview ? userGuideReviewInstructions.trim() : '';
+
+    const useTestCaseTemplate = includeTestCaseReview && reviewTestCases;
+    const useUserGuideTemplate = includeUserGuideReview && reviewUserGuide;
+
+    const mergedInstructions = [
+      includeTestCaseReview && testCaseInstructions
+        ? `Test Case Review Instructions:\n${testCaseInstructions}`
+        : '',
+      includeUserGuideReview && userGuideInstructions
+        ? `User Guide Review Instructions:\n${userGuideInstructions}`
+        : '',
+    ].filter(Boolean).join('\n\n');
+
     return {
       inputs: {
         jira_id: jiraIds[0] || jiraId || undefined,
@@ -303,12 +334,12 @@ export const HomePage: React.FC = () => {
         valueedge_id: valueEdgeIds[0] || valueEdgeId || undefined,
         valueedge_ids: valueEdgeIds.length > 0 ? valueEdgeIds : undefined,
         files: uploadedFiles,
-        custom_instructions: buildMergedReviewInstructions() || undefined,
-        test_case_review_instructions: testCaseReviewInstructions.trim() || undefined,
-        user_guide_review_instructions: userGuideReviewInstructions.trim() || undefined,
-        review_test_cases: reviewTestCases,
-        review_user_guide: reviewUserGuide,
-        user_guide_url: userGuideUrl.trim() || undefined,
+        custom_instructions: mergedInstructions || undefined,
+        test_case_review_instructions: includeTestCaseReview && testCaseInstructions ? testCaseInstructions : undefined,
+        user_guide_review_instructions: includeUserGuideReview && userGuideInstructions ? userGuideInstructions : undefined,
+        review_test_cases: useTestCaseTemplate,
+        review_user_guide: useUserGuideTemplate,
+        user_guide_url: includeUserGuideReview ? userGuideUrl.trim() || undefined : undefined,
         clarification_history: reviewClarificationConversation,
       },
       configuration: {
@@ -336,11 +367,9 @@ export const HomePage: React.FC = () => {
         const currentQuestions = reviewOutput?.metadata?.clarification_questions || [];
         nextHistory = [...reviewClarificationConversation, { questions: currentQuestions, answer }];
         setReviewClarificationConversation(nextHistory);
-      } else if (reviewClarificationConversation.length > 0) {
-        setReviewClarificationConversation([]);
       }
 
-      const payload = buildReviewPayload();
+      const payload = buildReviewPayload(mode);
       payload.inputs.clarification_history = nextHistory;
 
       const response = mode === 'test-cases'
@@ -391,8 +420,21 @@ export const HomePage: React.FC = () => {
 
   const refreshReviewStatus = async () => {
     if (!reviewOutput) return;
-    const status = await api.reviewStatus(reviewOutput.review_id);
-    setReviewOutput(status.data);
+    setIsRefreshingReview(true);
+    try {
+      const status = await api.reviewStatus(reviewOutput.review_id);
+      setReviewOutput(status.data);
+      toast.success(`Review status: ${status.data.status}`);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      if (error?.response?.status === 404) {
+        toast.error('Review session not found. Please rerun review from the buttons above.');
+      } else {
+        toast.error(detail || 'Failed to refresh review status');
+      }
+    } finally {
+      setIsRefreshingReview(false);
+    }
   };
 
   const steps = [
@@ -575,7 +617,10 @@ export const HomePage: React.FC = () => {
             jiraIds={jiraIds}
             valueEdgeIds={valueEdgeIds}
             uploadedFiles={uploadedFiles}
-            onReviewFilesSelected={handleReviewFilesSelected}
+            reviewTestCaseFileIds={reviewTestCaseFileIds}
+            userGuideReferenceFileIds={userGuideReferenceFileIds}
+            onTestCaseFilesSelected={(files) => handleReviewFilesSelected(files, 'test-cases')}
+            onUserGuideFilesSelected={(files) => handleReviewFilesSelected(files, 'user-guide')}
             onRemoveFile={handleRemoveFile}
             provider={provider}
             model={model}
@@ -636,7 +681,7 @@ export const HomePage: React.FC = () => {
             <ReviewOutput
               review={reviewOutput}
               onRefreshStatus={refreshReviewStatus}
-              refreshing={isGenerating}
+              refreshing={isRefreshingReview}
               onSubmitClarification={handleReviewClarificationSubmit}
               onUploadClarificationFiles={handleReviewClarificationFileUpload}
               clarificationHistory={reviewClarificationConversation}

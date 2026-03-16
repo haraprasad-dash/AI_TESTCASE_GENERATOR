@@ -18,7 +18,10 @@ interface Props {
   jiraIds: string[];
   valueEdgeIds: string[];
   uploadedFiles: FileInput[];
-  onReviewFilesSelected: (files: FileList) => Promise<void>;
+  reviewTestCaseFileIds: string[];
+  userGuideReferenceFileIds: string[];
+  onTestCaseFilesSelected: (files: FileList) => Promise<void>;
+  onUserGuideFilesSelected: (files: FileList) => Promise<void>;
   onRemoveFile: (fileId: string) => void;
   provider?: 'groq' | 'ollama';
   model?: string;
@@ -38,7 +41,10 @@ export const ReviewSection: React.FC<Props> = ({
   jiraIds,
   valueEdgeIds,
   uploadedFiles,
-  onReviewFilesSelected,
+  reviewTestCaseFileIds,
+  userGuideReferenceFileIds,
+  onTestCaseFilesSelected,
+  onUserGuideFilesSelected,
   onRemoveFile,
   provider = 'groq',
   model = 'llama-3.3-70b-versatile',
@@ -51,10 +57,17 @@ export const ReviewSection: React.FC<Props> = ({
     return <FileText className="w-5 h-5 text-blue-500" />;
   };
 
-  const handleReviewFileInput = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReviewFileInput = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    target: 'test-cases' | 'user-guide'
+  ) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    await onReviewFilesSelected(files);
+    if (target === 'test-cases') {
+      await onTestCaseFilesSelected(files);
+    } else {
+      await onUserGuideFilesSelected(files);
+    }
     event.target.value = '';
   };
 
@@ -92,8 +105,17 @@ export const ReviewSection: React.FC<Props> = ({
     }
   };
 
-  const isTestCaseFile = (filename: string) => /\.(feature|xlsx|xls|txt|md)$/i.test(filename);
-  const testCaseFiles = uploadedFiles.filter((file) => isTestCaseFile(file.filename));
+  const isGuideReferenceFile = (filename: string) => /\.(feature|pdf|docx|txt|md|xlsx|xls)$/i.test(filename);
+  const scopedTestCaseFiles = uploadedFiles.filter((file) => reviewTestCaseFileIds.includes(file.file_id));
+  const scopedUserGuideReferenceFiles = uploadedFiles.filter((file) => userGuideReferenceFileIds.includes(file.file_id));
+  const testCaseFiles = scopedTestCaseFiles.length > 0
+    ? scopedTestCaseFiles
+    : uploadedFiles.filter(
+        (file) => /\.(feature|xlsx|xls|txt|md)$/i.test(file.filename) && !userGuideReferenceFileIds.includes(file.file_id)
+      );
+  const userGuideReferenceFiles = scopedUserGuideReferenceFiles.length > 0
+    ? scopedUserGuideReferenceFiles
+    : uploadedFiles.filter((file) => isGuideReferenceFile(file.filename) && !reviewTestCaseFileIds.includes(file.file_id));
 
   const renderInstructionField = (
     label: string,
@@ -147,7 +169,7 @@ export const ReviewSection: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 lg:items-stretch">
         <div className={`rounded-2xl border p-4 transition-colors h-full flex flex-col ${reviewTestCases ? 'border-blue-200 bg-blue-50/60' : 'border-slate-200 bg-slate-50'}`}>
           <label className="flex items-start gap-3 cursor-pointer">
             <input
@@ -166,7 +188,11 @@ export const ReviewSection: React.FC<Props> = ({
               </p>
             </div>
           </label>
-          <div className="mt-4 p-3 rounded-xl border border-blue-200 bg-white/70">
+          <div className="mt-4" aria-hidden="true">
+            <label className="input-label opacity-0 select-none">User Guide URL</label>
+            <div className="h-[48px] rounded-xl border border-transparent" />
+          </div>
+          <div className="mt-4 p-3 rounded-xl border border-blue-200 bg-white/70 min-h-[92px]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold text-slate-800">Attach Review Files</p>
               <label className="btn-secondary cursor-pointer">
@@ -176,12 +202,12 @@ export const ReviewSection: React.FC<Props> = ({
                   multiple
                   className="hidden"
                   accept=".feature,.xlsx,.xls,.txt,.md"
-                  onChange={handleReviewFileInput}
+                  onChange={(event) => handleReviewFileInput(event, 'test-cases')}
                 />
               </label>
             </div>
             {testCaseFiles.length > 0 && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-2 max-h-44 overflow-auto pr-1">
                 {testCaseFiles.map((file) => (
                   <div key={file.file_id} className="file-item bg-white">
                     <div className="flex items-center gap-3">
@@ -207,17 +233,20 @@ export const ReviewSection: React.FC<Props> = ({
             )}
           </div>
 
-          {reviewTestCases
-            ? renderInstructionField(
-                'Test Case Review Instructions (optional)',
-                testCaseReviewInstructions,
-                setTestCaseReviewInstructions,
-                'review_test_cases',
-                'test-cases',
-                'Add test case review-specific instructions (e.g., strict BDD syntax checks, prioritize coverage gaps, traceability, duplicates).',
-                'mt-4',
-              )
-            : <p className="mt-4 text-xs text-slate-400">Enable this section to configure test case review.</p>}
+          {!reviewTestCases && (
+            <p className="mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              Template is disabled for Test Case Review. Submitted instructions will be used directly.
+            </p>
+          )}
+          {renderInstructionField(
+            'Test Case Review Instructions (optional)',
+            testCaseReviewInstructions,
+            setTestCaseReviewInstructions,
+            'review_test_cases',
+            'test-cases',
+            'Add test case review-specific instructions (e.g., strict BDD syntax checks, prioritize coverage gaps, traceability, duplicates).',
+            'mt-4',
+          )}
         </div>
 
         <div className={`rounded-2xl border p-4 transition-colors h-full flex flex-col ${reviewUserGuide ? 'border-indigo-200 bg-indigo-50/60' : 'border-slate-200 bg-slate-50'}`}>
@@ -248,17 +277,63 @@ export const ReviewSection: React.FC<Props> = ({
               onChange={(e) => setUserGuideUrl(e.target.value)}
             />
           </div>
-          {reviewUserGuide
-            ? renderInstructionField(
-                'User Guide Review Instructions (optional)',
-                userGuideReviewInstructions,
-                setUserGuideReviewInstructions,
-                'review_user_guide',
-                'user-guide',
-                'Add user guide review-specific instructions (e.g., focus on accuracy, missing prerequisites, wording clarity, navigation issues).',
-                'mt-4',
-              )
-            : <p className="mt-4 text-xs text-slate-400">Enable this section to add user guide review-specific instructions.</p>}
+          <div className="mt-4 p-3 rounded-xl border border-indigo-200 bg-white/70 min-h-[116px]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Attach Reference Files</p>
+                <p className="text-xs text-slate-500">Optional supporting guide artifacts used as reference during user guide review.</p>
+              </div>
+              <label className="btn-secondary cursor-pointer">
+                Attach Reference Files
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept=".feature,.pdf,.docx,.txt,.md,.xlsx,.xls"
+                  onChange={(event) => handleReviewFileInput(event, 'user-guide')}
+                />
+              </label>
+            </div>
+            {userGuideReferenceFiles.length > 0 && (
+              <div className="mt-3 space-y-2 max-h-44 overflow-auto pr-1">
+                {userGuideReferenceFiles.filter((file) => isGuideReferenceFile(file.filename)).map((file) => (
+                  <div key={file.file_id} className="file-item bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+                        {getFileIcon(file.filename)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{file.filename}</p>
+                        <p className="text-xs text-slate-400">{(file.size_bytes / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onRemoveFile(file.file_id)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                      type="button"
+                      aria-label={`Remove ${file.filename}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {!reviewUserGuide && (
+            <p className="mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              Template is disabled for User Guide Review. Submitted instructions will be used directly.
+            </p>
+          )}
+          {renderInstructionField(
+            'User Guide Review Instructions (optional)',
+            userGuideReviewInstructions,
+            setUserGuideReviewInstructions,
+            'review_user_guide',
+            'user-guide',
+            'Add user guide review-specific instructions (e.g., focus on customer-facing guidance, domain terminology, and practical usage steps).',
+            'mt-4',
+          )}
         </div>
       </div>
     </div>

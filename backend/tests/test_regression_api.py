@@ -583,6 +583,38 @@ def test_review_user_guide_requires_url_even_with_uploaded_guide_file() -> None:
     assert response.json()["detail"] == "Please provide user guide URL"
 
 
+def test_review_user_guide_does_not_ask_test_case_specific_clarifications() -> None:
+    response = client.post(
+        "/api/review/user-guide",
+        json={
+            "inputs": {
+                "review_test_cases": False,
+                "review_user_guide": True,
+                "user_guide_url": "https://example.com/theme-guide",
+                "files": [
+                    {
+                        "filename": "theme_setting.feature",
+                        "extracted_text": "Scenario: Update theme\nGiven user opens settings\nWhen user changes header color",
+                        "content_type": "text/plain",
+                    },
+                    {
+                        "filename": "theme-guide.md",
+                        "extracted_text": "# Theme Settings\nSteps to change theme colors.",
+                        "content_type": "text/markdown",
+                    },
+                ],
+            },
+            "configuration": {"provider": "groq"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    joined_questions = " ".join(body["metadata"]["clarification_questions"])
+    assert "Gherkin" not in joined_questions
+    assert "expected-result" not in joined_questions
+
+
 def test_documents_upload_accepts_feature_file_with_generic_mime(monkeypatch, tmp_path) -> None:
     class DummyParser:
         async def parse_file(self, file_path, content_type):
