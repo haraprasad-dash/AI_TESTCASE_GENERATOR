@@ -158,7 +158,6 @@ class ReviewInputs(BaseModel):
     user_guide_review_instructions: Optional[str] = None
     review_test_cases: bool = True
     review_user_guide: bool = True
-    user_guide_url: Optional[str] = None
     clarification_history: List[ClarificationEntry] = []
 
 

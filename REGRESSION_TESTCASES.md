@@ -199,15 +199,15 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: request with only mode-specific review instructions.
 - Expectation: sources include `custom_instructions` for downstream handling.
 
-41. `RG-041` User-guide review requires URL even when guide file is uploaded
+41. `RG-041` User-guide review requires uploaded guide file(s)
 - Endpoint: `POST /api/review/user-guide`
-- Input: `review_user_guide=true`, uploaded guide file present, no `user_guide_url`.
-- Expectation: request fails with `Please provide user guide URL`.
+- Input: `review_user_guide=true`, no guide file uploaded.
+- Expectation: request fails with `Please attach user guide files (.pdf, .docx, .txt, .md)`.
 
 42. `RG-042` User-guide review does not ask test-case-only clarification questions
 - Endpoint: `POST /api/review/user-guide`
-- Input: guide URL plus uploaded `.feature` reference file and guide document.
-- Expectation: clarification questions can ask about guide completeness/version, but must not ask Gherkin or test-case expected-result questions.
+- Input: uploaded guide document plus uploaded `.feature` reference file.
+- Expectation: clarification questions can ask about guide completeness, but must not ask Gherkin or test-case expected-result questions.
 
 43. `RG-043` Answered clarification questions are not repeated
 - Function: `app.services.review_service.ReviewService.review`
@@ -244,6 +244,51 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: test-case review with template enabled.
 - Expectation: `report_json.test_case_review.summary.review_mode == template_guided`.
 
+50. `RG-050` Review excludes negative/edge/exploratory scenarios from customer-facing guide coverage
+- Function: `app.services.review_service.ReviewService._customer_facing_topics_from_testcases`
+- Input: `.feature` content with mixed positive + `@Negative` + `@Exploratory/@EdgeCase` scenarios.
+- Expectation: only customer-facing positive/integration topics remain in guide-coverage topic list.
+
+51. `RG-051` Section-only guide instruction narrows extracted content
+- Function: `app.services.review_service.ReviewService._filter_text_by_section_hints`
+- Input: guide text with multiple sections and section hint requesting one specific section.
+- Expectation: strict section filter keeps requested section context and excludes unrelated sections.
+
+52. `RG-052` User-guide report output shape is deterministic and layout-stable
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide review with testcase reference artifacts.
+- Expectation: markdown includes fixed sections for documented features, coverage gaps, clarity issues, defect log, and priority actions.
+
+53. `RG-053` User-guide review supports multi-file document context
+- Endpoint: `POST /api/review/user-guide`
+- Input: multiple guide artifacts (`.pdf`, `.docx`, `.md`) attached together with testcase reference file.
+- Expectation: review merges all guide document text into one deterministic analysis context and returns completed report.
+
+54. `RG-054` User-guide review succeeds without URL when guide documents are attached
+- Endpoint: `POST /api/review/user-guide`
+- Input: uploaded guide document(s), no `user_guide_url`.
+- Expectation: request succeeds and returns structured user-guide review output.
+
+55. `RG-055` Detailed user-guide instruction prompts run in non-blocking clarification mode
+- Function: `app.services.review_service.ReviewService.review`
+- Input: long user-guide instruction prompt (detailed scope constraints) with attached guide document and testcase reference.
+- Expectation: review returns `status=completed` even if optional clarification candidates exist, and report is generated in a single pass.
+
+56. `RG-056` Unreadable guide source returns explicit source-access report
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide review where attached guide files cannot be parsed into meaningful text.
+- Expectation: report includes `Source Access Gap` and `Action Required` guidance instead of low-confidence bulk coverage mapping.
+
+57. `RG-057` User-guide gap-analysis framing includes status matrix and section-4 checklist
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide review with valid extracted guide content and testcase reference artifacts.
+- Expectation: markdown includes deterministic preface (`Status | Meaning | Customer Impact`) and `4) RECOMMENDED DOCUMENTATION STRUCTURE` with key customer questions.
+
+58. `RG-058` User-guide output preserves testcase-level traceability for matching/missing/modification
+- Function: `app.services.review_service.ReviewService._build_user_guide_review`
+- Input: user-guide review with `.feature` testcases and guide text containing full/partial/missing coverage patterns.
+- Expectation: payload and markdown include testcase references (`TC-xxx`) for matching and missing items, and modification entries include exact line reference, current text, required change, and suggested corrected text.
+
 ## Manual Smoke Checks (recommended)
 
 1. Open UI Settings -> LLM Settings, save valid Groq key, reopen modal.
@@ -270,11 +315,11 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 8. Enable both review modes and enter separate test-case and user-guide instructions.
 - Expectation: each section keeps its own instructions, each Enhance button targets the correct subtype, and review request completes without dropping section instructions.
 
-9. Try running user-guide review with no URL.
-- Expectation: UI blocks submit and backend returns `Please provide user guide URL` if called directly.
+9. Try running user-guide review with no attached guide document.
+- Expectation: UI blocks submit and backend returns `Please attach user guide files (.pdf, .docx, .txt, .md)` if called directly.
 
-10. In **User Guide Review Section**, attach optional reference files and run user-guide review with a valid URL.
-- Expectation: upload succeeds, the files remain visible in the user-guide card, and review uses them as context without turning the request into test-case review.
+10. In **User Guide Review Section**, attach multiple guide documents and run user-guide review.
+- Expectation: upload succeeds, all files remain visible in the user-guide card, and review uses merged guide context without turning the request into test-case review.
 
 11. Answer a user-guide clarification round, then submit follow-up clarification.
 - Expectation: already answered questions do not reappear unless new unanswered ambiguity is introduced.

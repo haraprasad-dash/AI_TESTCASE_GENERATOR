@@ -61,10 +61,10 @@ export const HomePage: React.FC = () => {
   const [reviewClarificationConversation, setReviewClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
   const [reviewTestCases, setReviewTestCases] = useState(true);
   const [reviewUserGuide, setReviewUserGuide] = useState(true);
-  const [userGuideUrl, setUserGuideUrl] = useState('');
   const [testCaseReviewInstructions, setTestCaseReviewInstructions] = useState('');
   const [userGuideReviewInstructions, setUserGuideReviewInstructions] = useState('');
   const [reviewTestCaseFileIds, setReviewTestCaseFileIds] = useState<string[]>([]);
+  const [userGuideDocumentFileIds, setUserGuideDocumentFileIds] = useState<string[]>([]);
   const [userGuideReferenceFileIds, setUserGuideReferenceFileIds] = useState<string[]>([]);
 
   const hasGenerationInput = Boolean(
@@ -87,16 +87,19 @@ export const HomePage: React.FC = () => {
   const handleRemoveFile = (fileId: string) => {
     setUploadedFiles((prev) => prev.filter((f) => f.file_id !== fileId));
     setReviewTestCaseFileIds((prev) => prev.filter((id) => id !== fileId));
+    setUserGuideDocumentFileIds((prev) => prev.filter((id) => id !== fileId));
     setUserGuideReferenceFileIds((prev) => prev.filter((id) => id !== fileId));
   };
 
-  const handleReviewFilesSelected = async (files: FileList, scope: 'test-cases' | 'user-guide') => {
+  const handleReviewFilesSelected = async (files: FileList, scope: 'test-cases' | 'user-guide-docs' | 'user-guide-reference') => {
     for (const file of Array.from(files)) {
       try {
         const response = await api.uploadFile(file);
         setUploadedFiles((prev) => [...prev, response.data]);
         if (scope === 'test-cases') {
           setReviewTestCaseFileIds((prev) => prev.includes(response.data.file_id) ? prev : [...prev, response.data.file_id]);
+        } else if (scope === 'user-guide-docs') {
+          setUserGuideDocumentFileIds((prev) => prev.includes(response.data.file_id) ? prev : [...prev, response.data.file_id]);
         } else {
           setUserGuideReferenceFileIds((prev) => prev.includes(response.data.file_id) ? prev : [...prev, response.data.file_id]);
         }
@@ -249,6 +252,7 @@ export const HomePage: React.FC = () => {
   };
 
   const isTestCaseArtifact = (filename: string) => /\.(feature|xlsx|xls|txt|md)$/i.test(filename);
+  const isGuideArtifact = (filename: string) => /\.(pdf|docx|txt|md)$/i.test(filename);
 
   const validateReviewRequest = (reviewMode: 'test-cases' | 'user-guide' | 'both') => {
     const includeTestCaseSection = reviewMode === 'test-cases' || reviewMode === 'both';
@@ -287,21 +291,12 @@ export const HomePage: React.FC = () => {
     }
 
     if (includeUserGuideSection && (enableUserGuideTemplate || hasUserGuideInstructionOnly)) {
-      if (!userGuideUrl.trim()) {
-        toast.error('Please provide user guide URL');
-        return false;
-      }
-    }
-
-    if (userGuideUrl.trim()) {
-      try {
-        const parsed = new URL(userGuideUrl.trim());
-        if (!(parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
-          toast.error('Please provide a valid URL');
-          return false;
-        }
-      } catch {
-        toast.error('Please provide a valid URL');
+      const scopedGuideFiles = uploadedFiles.filter((file) => userGuideDocumentFileIds.includes(file.file_id));
+      const hasGuideFiles = scopedGuideFiles.length > 0
+        ? scopedGuideFiles.some((file) => isGuideArtifact(file.filename))
+        : uploadedFiles.some((file) => isGuideArtifact(file.filename));
+      if (!hasGuideFiles) {
+        toast.error('Please attach user guide documents (.pdf, .docx, .txt, .md)');
         return false;
       }
     }
@@ -339,7 +334,6 @@ export const HomePage: React.FC = () => {
         user_guide_review_instructions: includeUserGuideReview && userGuideInstructions ? userGuideInstructions : undefined,
         review_test_cases: useTestCaseTemplate,
         review_user_guide: useUserGuideTemplate,
-        user_guide_url: includeUserGuideReview ? userGuideUrl.trim() || undefined : undefined,
         clarification_history: reviewClarificationConversation,
       },
       configuration: {
@@ -514,9 +508,11 @@ export const HomePage: React.FC = () => {
       {/* Main Content */}
       <main className="main-wrapper">
         {isGenerating && (
-          <div className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2">
-            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-            <span className="text-sm font-medium">Generating... Please wait</span>
+          <div className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-xl flex flex-col gap-1 max-w-xs">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full flex-shrink-0" />
+              <span className="text-sm font-medium">Generating... Please wait</span>
+            </div>
           </div>
         )}
 
@@ -608,8 +604,6 @@ export const HomePage: React.FC = () => {
             setReviewTestCases={setReviewTestCases}
             reviewUserGuide={reviewUserGuide}
             setReviewUserGuide={setReviewUserGuide}
-            userGuideUrl={userGuideUrl}
-            setUserGuideUrl={setUserGuideUrl}
             testCaseReviewInstructions={testCaseReviewInstructions}
             setTestCaseReviewInstructions={setTestCaseReviewInstructions}
             userGuideReviewInstructions={userGuideReviewInstructions}
@@ -618,9 +612,11 @@ export const HomePage: React.FC = () => {
             valueEdgeIds={valueEdgeIds}
             uploadedFiles={uploadedFiles}
             reviewTestCaseFileIds={reviewTestCaseFileIds}
+            userGuideDocumentFileIds={userGuideDocumentFileIds}
             userGuideReferenceFileIds={userGuideReferenceFileIds}
             onTestCaseFilesSelected={(files) => handleReviewFilesSelected(files, 'test-cases')}
-            onUserGuideFilesSelected={(files) => handleReviewFilesSelected(files, 'user-guide')}
+            onUserGuideDocumentsSelected={(files) => handleReviewFilesSelected(files, 'user-guide-docs')}
+            onUserGuideReferenceFilesSelected={(files) => handleReviewFilesSelected(files, 'user-guide-reference')}
             onRemoveFile={handleRemoveFile}
             provider={provider}
             model={model}

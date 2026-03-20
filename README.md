@@ -191,6 +191,7 @@ JIRA_API_TOKEN=your_token_here
 VALUEEDGE_BASE_URL=https://valueedge.yourcompany.com
 VALUEEDGE_CLIENT_ID=your_client_id
 VALUEEDGE_CLIENT_SECRET=your_client_secret
+
 ```
 
 Create `frontend/.env`:
@@ -377,10 +378,10 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 ### Review Instruction Fields
 
 - **Test Case Review Section** has its own mode toggle, instructions field, and file attachment area
-- **User Guide Review Section** has its own mode toggle, URL field, optional reference-file attachment area, and instructions field
+- **User Guide Review Section** has its own mode toggle, instructions field, and dedicated user-guide document attachment area
 - **Test Case Review** requires attached test case files
-- **User Guide Review** requires a valid guide URL
-- **User Guide Review** can also include uploaded reference files (`.pdf`, `.docx`, `.txt`, `.md`) for additional context
+- **User Guide Review** requires attached user guide documents (`.pdf`, `.docx`, `.txt`, `.md`)
+- **User Guide Review** supports attaching multiple guide files in one run
 - **Template Enabled vs Disabled behavior is now explicit**:
    - Template enabled (`review_* = true`) => template-guided checklist review using system review skill prompts
    - Template disabled + instructions => instruction-only review mode
@@ -418,12 +419,22 @@ Use these when you need quality/completeness assessment of existing artifacts, n
 
 ### User Guide Review Quality Signals
 
-- User-guide review now checks URL content and testcase-derived focus terms when available
+- User-guide review analyzes uploaded guide documents and testcase-derived focus terms
+- Multi-file guide uploads are supported and merged as review context
+- If attached guide documents are unreadable/empty after parsing, review reports a **Source Access Gap** instead of producing misleading coverage results
+- In Source Access Gap cases, attach readable guide artifacts (`.pdf`, `.docx`, `.md`, `.txt`) and rerun to unlock full traceability/coverage analysis
+- Section-scoped reading is supported from instructions: if user asks to review specific section(s) only, review is constrained to those sections
+- Customer-facing filtering is enforced for testcase-guided guide review: negative/edge/exploratory/performance scenarios are excluded from coverage analysis
 - For testcase-guided review (e.g., `Agent interface header text color`), missing-topic findings include targeted gaps such as default color behavior, validation rules, color picker behavior, and upgrade compatibility notes
 - Review output now includes a structured summary dashboard (grade, quality score, missing/modification counts) instead of plain raw text only
+- User-guide report output now uses fixed sections for consistency: properly documented features, coverage gaps, clarity issues, defect log, and severity-prioritized actions
+- User-guide report now starts with a deterministic gap-analysis preface (`Status | Meaning | Customer Impact`) and includes a recommended documentation structure checklist with key customer questions
+- User-guide review output now maps findings to testcase-level references (`TC-xxx`) across all three buckets: matching, missing, and needs-modification
+- Needs-modification items now include exact guide line reference, current text, required change, and example corrected wording
 - For modification findings, review now reports **line-level pointers** (e.g., `L12`) with current text and suggested rewrite guidance
 - Ambiguous phrases (e.g., `TBD`, `etc`, `as needed`) are flagged as high-priority rewrite items with deterministic correction guidance
 - When template mode is enabled, additional mandatory checklist gaps are evaluated from repository skills (`skill-prompt-userguide-review.md`, `skill-prompt-testcase-review.md`)
+- For detailed user-guide instruction prompts, clarification questions are kept non-blocking so review can complete in one pass
 
 ### Review Endpoints
 

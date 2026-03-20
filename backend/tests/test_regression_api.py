@@ -536,14 +536,13 @@ def test_review_status_returns_partial_results() -> None:
         assert "partial_results" in status_body
 
 
-def test_review_user_guide_rejects_invalid_url() -> None:
+def test_review_user_guide_requires_uploaded_guide_documents() -> None:
     response = client.post(
         "/api/review/user-guide",
         json={
             "inputs": {
                 "review_test_cases": False,
                 "review_user_guide": True,
-                "user_guide_url": "not-a-valid-url",
                 "files": [
                     {
                         "filename": "login_test_cases.feature",
@@ -557,10 +556,10 @@ def test_review_user_guide_rejects_invalid_url() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Please provide a valid URL"
+    assert response.json()["detail"] == "Please attach user guide files (.pdf, .docx, .txt, .md)"
 
 
-def test_review_user_guide_requires_url_even_with_uploaded_guide_file() -> None:
+def test_review_user_guide_accepts_uploaded_guide_file_without_url() -> None:
     response = client.post(
         "/api/review/user-guide",
         json={
@@ -579,8 +578,9 @@ def test_review_user_guide_requires_url_even_with_uploaded_guide_file() -> None:
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Please provide user guide URL"
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"completed", "clarification_required"}
 
 
 def test_review_user_guide_does_not_ask_test_case_specific_clarifications() -> None:

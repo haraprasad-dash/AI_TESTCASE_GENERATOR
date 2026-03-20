@@ -442,7 +442,7 @@ def test_review_clarification_questions_are_bounded_and_non_duplicate() -> None:
     assert len(questions) == len(set(questions))
 
 
-def test_review_smart_default_questions_include_bdd_excel_and_url_prompts() -> None:
+def test_review_smart_default_questions_include_bdd_excel_and_source_alignment_prompts() -> None:
     service = ReviewService()
     inputs = ReviewInputs(
         jira_id="PROJ-1",
@@ -458,7 +458,6 @@ def test_review_smart_default_questions_include_bdd_excel_and_url_prompts() -> N
     joined = " ".join(questions)
     assert "Gherkin" in joined
     assert "Test ID" in joined
-    assert "latest version" in joined
     assert "authoritative version" in joined
 
 
@@ -549,7 +548,7 @@ def test_review_user_guide_report_uses_actual_section_titles() -> None:
     result = service.review("user-guide", inputs)
 
     assert "Theme Settings" in result.report_markdown
-    assert "Customer-Facing Assessment" in result.report_markdown
+    assert "FEATURES PROPERLY DOCUMENTED" in result.report_markdown
     assert "Core workflow" not in result.report_markdown
 
 
@@ -579,7 +578,7 @@ def test_review_user_guide_reports_line_level_modification_references() -> None:
 
     assert any(row.get("line_reference") == "L3" for row in modifications)
     assert guide_payload.get("summary", {}).get("quality_score") is not None
-    assert "Line to modify: L3" in result.report_markdown
+    assert "Line: L3" in result.report_markdown
 
 
 def test_review_user_guide_template_mode_differs_from_instruction_only_mode() -> None:
@@ -898,3 +897,135 @@ def test_review_extract_requirements_supports_multiple_ticket_ids() -> None:
     assert "Requirement from JIRA: PROJ-2" in requirements
     assert "Requirement from ValueEdge: 1001" in requirements
     assert "Requirement from ValueEdge: 1002" in requirements
+
+
+def test_review_filters_out_negative_and_edge_scenarios_from_customer_topics() -> None:
+        service = ReviewService()
+        feature_text = """
+Feature: Purge
+
+@Functional @Positive
+Scenario: Create purge rule successfully
+    Given valid data
+    When admin saves
+    Then rule is created
+
+@Functional @Negative
+Scenario: Attempt to save invalid rule
+    Given invalid data
+    When admin saves
+    Then validation error is shown
+
+@Exploratory @EdgeCase
+Scenario: Concurrent updates from two users
+    Given two admins edit simultaneously
+    When both save
+    Then state remains consistent
+"""
+
+        topics = service._customer_facing_topics_from_testcases(feature_text)
+
+        assert "Create purge rule successfully" in topics
+        assert "Attempt to save invalid rule" not in topics
+        assert "Concurrent updates from two users" not in topics
+
+
+def test_section_only_instruction_filters_guide_text() -> None:
+        service = ReviewService()
+        guide_text = """
+# Overview
+General introduction
+
+# Scheduling
+Set schedule start time and recurrence
+
+# Audit
+Review purge audit history
+"""
+
+        section_hints = ["Scheduling"]
+        filtered = service._filter_text_by_section_hints(guide_text, section_hints, strict=True)
+
+        assert "Scheduling" in filtered
+        assert "Overview" not in filtered
+
+
+def test_review_user_guide_reports_source_access_gap_when_uploaded_guide_content_is_unavailable() -> None:
+    service = ReviewService()
+    inputs = ReviewInputs(
+        review_test_cases=False,
+        review_user_guide=True,
+        files=[
+            {
+                "filename": "user_guide.md",
+                "extracted_text": "TBD",
+            }
+        ],
+    )
+
+    result = service.review("user-guide", inputs)
+    summary = result.report_json.get("user_guide_review", {}).get("summary", {})
+
+    assert "Source Access Gap" in result.report_markdown
+    assert "Action Required" in result.report_markdown
+    assert summary.get("sections_reviewed") == 0
+
+
+def test_portal_shell_detector_flags_low_content_shell() -> None:
+    service = ReviewService()
+    shell_html = "<html><body><div id='root'></div><script src='app.js'></script>Loading...</body></html>"
+    extracted = "Loading"
+
+    assert service._looks_like_portal_shell(shell_html, extracted) is True
+
+
+def test_fetch_user_guide_uses_reader_proxy_on_shell_page(monkeypatch) -> None:
+    service = ReviewService()
+
+    class DummyResponse:
+        def __init__(self, body: str) -> None:
+            self._body = body.encode("utf-8")
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    shell_html = "<html><body><div id='root'></div><script src='main.js'></script>Loading...</body></html>"
+
+    monkeypatch.setattr(
+        "app.services.review_service.urllib.request.urlopen",
+        lambda req, timeout=20: DummyResponse(shell_html),
+    )
+    monkeypatch.setattr(
+        service,
+        "_fetch_reader_proxy_text",
+        lambda url: ("Purge Data\nUsers can review and confirm purge.", None),
+    )
+
+    text, warning = service._fetch_user_guide_url_text(
+        "https://stagingdocs.idrive360.com/User-Guide/Purge-Data/",
+        section_hints=[],
+        strict_section_only=False,
+    )
+
+    assert warning is None
+    assert "Purge Data" in text
+
+
+def test_guide_fetch_headers_include_optional_auth_context() -> None:
+    service = ReviewService()
+    service._settings = SimpleNamespace(
+        guide_fetch_cookie="sessionid=abc123",
+        guide_fetch_authorization="Bearer token-xyz",
+    )
+
+    headers = service._build_guide_fetch_headers()
+
+    assert headers["Cookie"] == "sessionid=abc123"
+    assert headers["Authorization"] == "Bearer token-xyz"
+    assert "User-Agent" in headers

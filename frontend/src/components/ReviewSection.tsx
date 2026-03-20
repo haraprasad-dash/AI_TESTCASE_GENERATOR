@@ -9,8 +9,6 @@ interface Props {
   setReviewTestCases: (value: boolean) => void;
   reviewUserGuide: boolean;
   setReviewUserGuide: (value: boolean) => void;
-  userGuideUrl: string;
-  setUserGuideUrl: (value: string) => void;
   testCaseReviewInstructions: string;
   setTestCaseReviewInstructions: (value: string) => void;
   userGuideReviewInstructions: string;
@@ -19,9 +17,11 @@ interface Props {
   valueEdgeIds: string[];
   uploadedFiles: FileInput[];
   reviewTestCaseFileIds: string[];
+  userGuideDocumentFileIds: string[];
   userGuideReferenceFileIds: string[];
   onTestCaseFilesSelected: (files: FileList) => Promise<void>;
-  onUserGuideFilesSelected: (files: FileList) => Promise<void>;
+  onUserGuideDocumentsSelected: (files: FileList) => Promise<void>;
+  onUserGuideReferenceFilesSelected: (files: FileList) => Promise<void>;
   onRemoveFile: (fileId: string) => void;
   provider?: 'groq' | 'ollama';
   model?: string;
@@ -32,8 +32,6 @@ export const ReviewSection: React.FC<Props> = ({
   setReviewTestCases,
   reviewUserGuide,
   setReviewUserGuide,
-  userGuideUrl,
-  setUserGuideUrl,
   testCaseReviewInstructions,
   setTestCaseReviewInstructions,
   userGuideReviewInstructions,
@@ -42,9 +40,11 @@ export const ReviewSection: React.FC<Props> = ({
   valueEdgeIds,
   uploadedFiles,
   reviewTestCaseFileIds,
+  userGuideDocumentFileIds,
   userGuideReferenceFileIds,
   onTestCaseFilesSelected,
-  onUserGuideFilesSelected,
+  onUserGuideDocumentsSelected,
+  onUserGuideReferenceFilesSelected,
   onRemoveFile,
   provider = 'groq',
   model = 'llama-3.3-70b-versatile',
@@ -59,14 +59,16 @@ export const ReviewSection: React.FC<Props> = ({
 
   const handleReviewFileInput = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    target: 'test-cases' | 'user-guide'
+    target: 'test-cases' | 'user-guide-docs' | 'user-guide-reference'
   ) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     if (target === 'test-cases') {
       await onTestCaseFilesSelected(files);
+    } else if (target === 'user-guide-docs') {
+      await onUserGuideDocumentsSelected(files);
     } else {
-      await onUserGuideFilesSelected(files);
+      await onUserGuideReferenceFilesSelected(files);
     }
     event.target.value = '';
   };
@@ -92,7 +94,6 @@ export const ReviewSection: React.FC<Props> = ({
           content_type: file.content_type,
           extracted_snippet: (file.extracted_text || '').slice(0, 180),
         })),
-        user_guide_url: userGuideUrl.trim() || undefined,
         review_test_cases: reviewTestCases,
         review_user_guide: reviewUserGuide,
       });
@@ -105,17 +106,32 @@ export const ReviewSection: React.FC<Props> = ({
     }
   };
 
+  const isGuideDocumentFile = (filename: string) => /\.(pdf|docx|txt|md)$/i.test(filename);
   const isGuideReferenceFile = (filename: string) => /\.(feature|pdf|docx|txt|md|xlsx|xls)$/i.test(filename);
+  const isGuideReferenceOnlyFile = (filename: string) => /\.(feature|xlsx|xls)$/i.test(filename);
   const scopedTestCaseFiles = uploadedFiles.filter((file) => reviewTestCaseFileIds.includes(file.file_id));
+  const scopedUserGuideDocumentFiles = uploadedFiles.filter((file) => userGuideDocumentFileIds.includes(file.file_id));
   const scopedUserGuideReferenceFiles = uploadedFiles.filter((file) => userGuideReferenceFileIds.includes(file.file_id));
   const testCaseFiles = scopedTestCaseFiles.length > 0
     ? scopedTestCaseFiles
     : uploadedFiles.filter(
-        (file) => /\.(feature|xlsx|xls|txt|md)$/i.test(file.filename) && !userGuideReferenceFileIds.includes(file.file_id)
+        (file) => /\.(feature|xlsx|xls|txt|md)$/i.test(file.filename)
+          && !userGuideDocumentFileIds.includes(file.file_id)
+          && !userGuideReferenceFileIds.includes(file.file_id)
+      );
+  const userGuideDocumentFiles = scopedUserGuideDocumentFiles.length > 0
+    ? scopedUserGuideDocumentFiles
+    : uploadedFiles.filter(
+        (file) => isGuideDocumentFile(file.filename)
+          && !userGuideReferenceFileIds.includes(file.file_id)
       );
   const userGuideReferenceFiles = scopedUserGuideReferenceFiles.length > 0
     ? scopedUserGuideReferenceFiles
-    : uploadedFiles.filter((file) => isGuideReferenceFile(file.filename) && !reviewTestCaseFileIds.includes(file.file_id));
+    : uploadedFiles.filter(
+        (file) => isGuideReferenceOnlyFile(file.filename)
+          && !reviewTestCaseFileIds.includes(file.file_id)
+          && !userGuideDocumentFileIds.includes(file.file_id)
+      );
 
   const renderInstructionField = (
     label: string,
@@ -189,7 +205,7 @@ export const ReviewSection: React.FC<Props> = ({
             </div>
           </label>
           <div className="mt-4" aria-hidden="true">
-            <label className="input-label opacity-0 select-none">User Guide URL</label>
+            <label className="input-label opacity-0 select-none">User Guide Documents</label>
             <div className="h-[48px] rounded-xl border border-transparent" />
           </div>
           <div className="mt-4 p-3 rounded-xl border border-blue-200 bg-white/70 min-h-[92px]">
@@ -267,21 +283,54 @@ export const ReviewSection: React.FC<Props> = ({
               </p>
             </div>
           </label>
-          <div className="mt-4">
-            <label className="input-label">User Guide URL</label>
-            <input
-              type="url"
-              className="input-field"
-              placeholder="https://docs.example.com/user-guide"
-              value={userGuideUrl}
-              onChange={(e) => setUserGuideUrl(e.target.value)}
-            />
-          </div>
           <div className="mt-4 p-3 rounded-xl border border-indigo-200 bg-white/70 min-h-[116px]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800">Attach Reference Files</p>
-                <p className="text-xs text-slate-500">Optional supporting guide artifacts used as reference during user guide review.</p>
+                <p className="text-sm font-semibold text-slate-800">Attach User Guide Documents</p>
+                <p className="text-xs text-slate-500">Attach one or more user guide files used for review (.pdf, .docx, .txt, .md).</p>
+              </div>
+              <label className="btn-secondary cursor-pointer">
+                Attach Guide Documents
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept=".pdf,.docx,.txt,.md"
+                  onChange={(event) => handleReviewFileInput(event, 'user-guide-docs')}
+                />
+              </label>
+            </div>
+            {userGuideDocumentFiles.length > 0 && (
+              <div className="mt-3 space-y-2 max-h-44 overflow-auto pr-1">
+                {userGuideDocumentFiles.filter((file) => isGuideDocumentFile(file.filename)).map((file) => (
+                  <div key={file.file_id} className="file-item bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+                        {getFileIcon(file.filename)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{file.filename}</p>
+                        <p className="text-xs text-slate-400">{(file.size_bytes / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onRemoveFile(file.file_id)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                      type="button"
+                      aria-label={`Remove ${file.filename}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-3 p-3 rounded-xl border border-indigo-200 bg-white/70 min-h-[92px]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Attach Reference Files (optional)</p>
+                <p className="text-xs text-slate-500">Attach testcase/PRD artifacts used as supporting context (.feature, .xlsx, .xls, .pdf, .docx, .txt, .md).</p>
               </div>
               <label className="btn-secondary cursor-pointer">
                 Attach Reference Files
@@ -289,8 +338,8 @@ export const ReviewSection: React.FC<Props> = ({
                   type="file"
                   multiple
                   className="hidden"
-                  accept=".feature,.pdf,.docx,.txt,.md,.xlsx,.xls"
-                  onChange={(event) => handleReviewFileInput(event, 'user-guide')}
+                  accept=".feature,.xlsx,.xls,.pdf,.docx,.txt,.md"
+                  onChange={(event) => handleReviewFileInput(event, 'user-guide-reference')}
                 />
               </label>
             </div>

@@ -118,7 +118,6 @@ export interface ReviewInputs {
   user_guide_review_instructions?: string;
   review_test_cases?: boolean;
   review_user_guide?: boolean;
-  user_guide_url?: string;
   clarification_history?: ClarificationEntry[];
 }
 
@@ -164,7 +163,6 @@ export interface EnhancePromptContext {
   jira_ids?: string[];
   valueedge_ids?: string[];
   files?: EnhancePromptFileContext[];
-  user_guide_url?: string;
   review_test_cases?: boolean;
   review_user_guide?: boolean;
   use_test_plan_template?: boolean;

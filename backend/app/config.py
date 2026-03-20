@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_default_model: str = "llama3.1"
 
+    # User guide URL fetch auth (optional)
+    guide_fetch_cookie: Optional[str] = None
+    guide_fetch_authorization: Optional[str] = None
+
 
 @lru_cache()
 def get_settings() -> Settings:

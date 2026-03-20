@@ -102,6 +102,30 @@ export const ReviewOutput: React.FC<Props> = ({
   const missingTopics = Array.isArray(userGuideReview?.missing_topics)
     ? userGuideReview?.missing_topics as Array<Record<string, string>>
     : [];
+  const normalizedModifications = modifications.map((row) => ({
+    issueType: row.issue_type || row.issue || 'Modification required',
+    testCase: row.test_case || row.feature || 'N/A',
+    lineReference: row.line_reference || 'Not found in extracted text',
+    observedText: row.observed_text || row.current || '',
+    recommendation: row.recommendation || row.corrected || row.issue || '',
+    replacementExample: row.replacement_example || row.corrected || '',
+  }));
+  const normalizedMissingTopics = missingTopics.map((row) => ({
+    expectedTopic: row.expected_topic || row.feature || row.topic || row.title || 'Untitled topic',
+    suggestedLocation: row.suggested_location || row.traceability || row.add_text || row.where || '',
+    testCase: row.test_case || row.feature || row.expected_topic || 'N/A',
+    whyMissing: row.why_missing || row.what || '',
+    customerImpact: row.customer_impact || row.impact || '',
+    suggestedText: row.suggested_text || row.add_text || '',
+  }));
+  const normalizedStrengths = strengths.map((row) => ({
+    title: row.title || row.feature || row.test_case || 'Guide section',
+    section: row.section || row.where || row.traceability || 'Guide section',
+    verificationStatus: row.verification_status || row.description || '',
+    testCase: row.test_case || row.feature || row.title || 'N/A',
+    lineReference: row.line_reference || row.traceability || '',
+    evidence: row.evidence || '',
+  }));
   const instructionChecks = Array.isArray(userGuideReview?.instruction_checks)
     ? userGuideReview?.instruction_checks as Array<Record<string, string>>
     : [];
@@ -351,24 +375,25 @@ export const ReviewOutput: React.FC<Props> = ({
                 <p className="text-xs text-slate-500">Instruction influence: {String(guideSummary.instruction_influence_count)}</p>
               )}
 
-              {modifications.length > 0 && (
+              {normalizedModifications.length > 0 && (
                 <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
                   <p className="text-sm font-semibold text-amber-900 mb-2">Line-Level Modifications Required</p>
                   <div className="space-y-2">
-                    {modifications.map((row, idx) => (
-                      <div key={`${row.line_reference || 'line'}-${idx}`} className="p-3 rounded-lg border border-amber-200 bg-white">
+                    {normalizedModifications.map((row, idx) => (
+                      <div key={`${row.lineReference || 'line'}-${idx}`} className="p-3 rounded-lg border border-amber-200 bg-white">
                         <p className="text-sm font-semibold text-slate-900">
-                          {idx + 1}. {row.issue_type || 'Modification required'}
+                          {idx + 1}. {row.issueType}
                         </p>
-                        <p className="text-xs text-slate-500">Line: {row.line_reference || 'Not found in extracted text'}</p>
-                        {row.observed_text && (
-                          <p className="text-sm text-slate-700 mt-1">Current: {row.observed_text}</p>
+                        <p className="text-xs text-slate-500">Test Case: {row.testCase}</p>
+                        <p className="text-xs text-slate-500">Line: {row.lineReference}</p>
+                        {row.observedText && (
+                          <p className="text-sm text-slate-700 mt-1">Current: {row.observedText}</p>
                         )}
                         {row.recommendation && (
                           <p className="text-sm text-slate-800 mt-1">Fix: {row.recommendation}</p>
                         )}
-                        {row.replacement_example && (
-                          <p className="text-sm text-slate-700 mt-1">Suggested rewrite: {row.replacement_example}</p>
+                        {row.replacementExample && (
+                          <p className="text-sm text-slate-700 mt-1">Suggested rewrite: {row.replacementExample}</p>
                         )}
                       </div>
                     ))}
@@ -376,28 +401,35 @@ export const ReviewOutput: React.FC<Props> = ({
                 </div>
               )}
 
-              {missingTopics.length > 0 && (
+              {normalizedMissingTopics.length > 0 && (
                 <div className="p-3 rounded-lg border border-blue-200 bg-blue-50">
                   <p className="text-sm font-semibold text-blue-900 mb-2">Missing Customer Topics</p>
-                  <ul className="space-y-2">
-                    {missingTopics.map((row, idx) => (
-                      <li key={`${row.expected_topic || 'topic'}-${idx}`} className="text-sm text-blue-900">
-                        <span className="font-semibold">{row.expected_topic || 'Untitled topic'}</span>
-                        {row.suggested_location ? ` — ${row.suggested_location}` : ''}
+                  <ul className="space-y-3">
+                    {normalizedMissingTopics.map((row, idx) => (
+                      <li key={`${row.expectedTopic || 'topic'}-${idx}`} className="text-sm text-blue-900 p-2 rounded border border-blue-200 bg-white">
+                        <p><span className="font-semibold">Missing Test Case:</span> {row.testCase}</p>
+                        <p><span className="font-semibold">Topic:</span> {row.expectedTopic}</p>
+                        {row.whyMissing && <p><span className="font-semibold">What is missing:</span> {row.whyMissing}</p>}
+                        {row.customerImpact && <p><span className="font-semibold">Customer impact:</span> {row.customerImpact}</p>}
+                        {row.suggestedLocation && <p><span className="font-semibold">Where to add:</span> {row.suggestedLocation}</p>}
+                        {row.suggestedText && <p><span className="font-semibold">Exact text to add:</span> {row.suggestedText}</p>}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
 
-              {strengths.length > 0 && (
+              {normalizedStrengths.length > 0 && (
                 <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50">
                   <p className="text-sm font-semibold text-emerald-900 mb-2">Confirmed Strong Areas</p>
-                  <ul className="space-y-1">
-                    {strengths.map((row, idx) => (
+                  <ul className="space-y-2">
+                    {normalizedStrengths.map((row, idx) => (
                       <li key={`${row.title || 'strength'}-${idx}`} className="text-sm text-emerald-900">
-                        <span className="font-semibold">{row.title || row.section || 'Guide section'}</span>
-                        {row.verification_status ? ` — ${row.verification_status}` : ''}
+                        <span className="font-semibold">{row.testCase}</span>
+                        {row.lineReference ? ` — ${row.lineReference}` : ''}
+                        {row.section ? ` — ${row.section}` : ''}
+                        {row.verificationStatus ? ` — ${row.verificationStatus}` : ''}
+                        {row.evidence ? ` — Evidence: ${row.evidence}` : ''}
                       </li>
                     ))}
                   </ul>

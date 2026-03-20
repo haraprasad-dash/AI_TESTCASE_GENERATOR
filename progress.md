@@ -217,6 +217,28 @@
 | 18:11 | Added quality guards for enhance outputs | ✅ Complete | Constraint retention + section alignment checks + fallback rewrite for misaligned responses |
 | 18:14 | Added regression coverage and ran verification | ✅ Complete | Added RG-032 to RG-035 behavior checks; backend regression `55 passed`; frontend build successful |
 
+## 2026-03-20 - User Guide Report Format Alignment (Kimi-style)
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 22:05 | Aligned user-guide report preface and structure to gap-analysis format | ✅ Complete | Added deterministic title/preface, status-meaning-impact matrix, and section-4 recommended documentation structure with key customer questions |
+| 22:08 | Reduced false-positive missing-topic artifacts from instruction-only phrases | ✅ Complete | Custom instruction checks remain measurable in summary/compliance, but no longer inflate missing feature rows |
+| 22:10 | Tuned scenario-to-guide coverage matching precision | ✅ Complete | Increased token-hit threshold and skipped heading-only lines to improve traceability quality |
+| 22:12 | Ran mandatory backend regression suite | ✅ Complete | `82 passed, 53 warnings` (`tests/test_regression_api.py`, `tests/test_regression_units.py`) |
+| 22:14 | Ran frontend build verification gate | ✅ Complete | `npm run build` successful; only existing chunk-size warning |
+| 22:16 | Synced docs with workflow change | ✅ Complete | Updated `README.md` quality signals and added `RG-057` in `REGRESSION_TESTCASES.md` |
+
+## 2026-03-20 - User Guide Traceability Detail Enhancement
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 22:24 | Added testcase-level IDs in guide coverage mapping | ✅ Complete | Matching and missing findings now carry `TC-xxx` references in report payload/markdown |
+| 22:27 | Added partial-coverage routing to modifications | ✅ Complete | Partially matched scenarios now produce line-specific modification entries instead of generic coverage gaps |
+| 22:29 | Enhanced frontend rendering for detailed review cards | ✅ Complete | Missing/strength/modification cards now display testcase mapping, line evidence, and exact correction guidance fields |
+| 22:31 | Ran backend regression gate after compatibility fix | ✅ Complete | `82 passed, 53 warnings` (`tests/test_regression_api.py`, `tests/test_regression_units.py`) |
+| 22:33 | Ran frontend build gate | ✅ Complete | `npm run build` successful; only existing chunk-size warning |
+| 22:34 | Synced documentation + regression catalog | ✅ Complete | Updated `README.md` and added `RG-058` in `REGRESSION_TESTCASES.md` |
+
 ## 2026-03-13 - Enhance Context Scope Clarification + Full-Type Verification
 
 ## 2026-03-16 - Review Attachment Upload Fix
@@ -258,6 +280,29 @@
 | 22:40 | Hardened clarification loop resolution | ✅ Complete | Clarification answer text now suppresses repeated prompts even with incomplete question history payloads |
 | 22:47 | Added explicit clarification-applied report section | ✅ Complete | Final report now records clarification rounds and latest answer considered |
 | 22:55 | Improved user-guide quality checks with testcase focus obligations | ✅ Complete | Added focused gap detection for feature-driven topics (header text color defaults, hex validation, color picker, upgrade behavior) |
+
+## 2026-03-20 - Purge User Guide Review Quality Upgrade
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 18:55 | Root-cause analysis of weak review output | ✅ Complete | Found shallow URL extraction and non-structured heuristic reporting in review service |
+| 19:05 | Improved guide URL extraction | ✅ Complete | Added HTML main-content extraction with nav/header/footer suppression and section-hint filtering support |
+| 19:12 | Added `.feature` scenario parser + customer-facing filtering | ✅ Complete | Excludes negative/edge/exploratory/performance scenarios from user-guide coverage analysis |
+| 19:20 | Reworked user-guide report layout | ✅ Complete | Added deterministic sections: documented features, coverage gaps, clarity issues, defect log, and priority actions |
+| 19:28 | Reduced blocking clarification loops | ✅ Complete | Detailed user-guide prompts now run in non-blocking mode so report completes in one pass |
+| 19:34 | Added/updated regression tests | ✅ Complete | Added filter and section-scope unit coverage, updated report-format assertions |
+| 19:40 | Backend regression gate | ✅ Complete | `78 passed` for `tests/test_regression_api.py` + `tests/test_regression_units.py` |
+| 19:46 | Frontend build gate | ✅ Complete | `npm run build` passed (existing chunk-size warning only) |
+| 19:52 | End-to-end dry run with purge prompt/url/feature | ✅ Complete | `/api/review/user-guide` now returns `status=completed` and emits structured report in `outputs/purge_review_dryrun.md` |
+
+## 2026-03-20 - Source Access Gap Strategy (User Guide Review)
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 20:05 | Diagnosed upstream guide URL behavior | ✅ Complete | Target docs URL returns SPA shell; direct MediaWiki/API endpoints observed as `403` from backend context |
+| 20:12 | Implemented source-access fallback in review service | ✅ Complete | URL-only inaccessible source now produces explicit `Source Access Gap` + actionable remediation |
+| 20:16 | Added regression coverage for fallback behavior | ✅ Complete | New unit test validates deterministic blocker report for URL-only inaccessible guide source |
+| 20:20 | Verification gate | ✅ Complete | Backend regression suite passed (`79 passed`) |
 | 23:02 | Improved review status refresh UX feedback | ✅ Complete | Refresh Status now shows status-success and actionable error feedback in UI |
 | 23:06 | Verification gate | ✅ Complete | Backend regression suite passed (`70 passed`); frontend `npm run build` passed |
 
@@ -285,3 +330,26 @@
 | 23:52 | Added explicit review mode output | ✅ Complete | `report_json.*.summary.review_mode` now exposes `template_guided` vs `instruction_only` and UI displays mode |
 | 23:55 | Added regression tests for mode differentiation | ✅ Complete | Added tests validating mode value and behavior divergence |
 | 23:57 | Verification gate | ✅ Complete | Backend regression: `73 passed`; frontend build successful |
+
+## 2026-03-20 - URL Extraction Fallback Hardening
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 23:18 | Added portal-shell detection in URL fetch path | ✅ Complete | Detects JS shell markers (root/loading/script-heavy responses) with low extracted-content threshold |
+| 23:23 | Implemented reader-proxy fallback for guide extraction | ✅ Complete | When direct fetch is shell-like, service retries via text reader proxy before source-gap fallback |
+| 23:28 | Added optional authenticated fetch headers | ✅ Complete | Introduced `GUIDE_FETCH_COOKIE` and `GUIDE_FETCH_AUTHORIZATION` settings for protected documentation portals |
+| 23:31 | Added regression coverage for fallback and header behavior | ✅ Complete | Added unit tests for shell detection, proxy fallback success path (`RG-053`), and auth-header assembly (`RG-054`) |
+| 23:34 | Documentation synchronization | ✅ Complete | Updated README and regression catalog with fallback + protected-portal fetch behavior |
+| 23:40 | Verification gate | ✅ Complete | Backend regression suite passed (`82 passed`); frontend build passed |
+| 23:45 | Live smoke check with staging purge URL | ⚠️ Blocked by upstream sign-in wall | Reader proxy returned `OpenText Sign-in`; URL extraction still needs valid session cookie/auth token for full content |
+| 23:49 | Mitigation delivered | ✅ Complete | Backend now supports session-based URL fetch via `.env` auth headers to extract protected guide content when credentials are provided |
+
+## 2026-03-20 - User Guide Review Attachment-Only Workflow
+
+| Time | Activity | Status | Notes |
+|------|----------|--------|-------|
+| 21:50 | Removed URL/session-cookie UX from Review section | ✅ Complete | User Guide Review now uses document attachments only; URL input path removed from frontend |
+| 21:54 | Switched backend review validation to guide-file requirement | ✅ Complete | `review_user_guide=true` now requires uploaded `.pdf/.docx/.txt/.md` guide files instead of `user_guide_url` |
+| 21:58 | Preserved multi-file guide support | ✅ Complete | Multiple guide files are accepted and merged as deterministic review context |
+| 22:02 | Updated regression catalog + tests for file-only flow | ✅ Complete | Replaced URL-required assertions with attachment-required assertions and no-URL success path |
+| 22:07 | Verification gate | ✅ Complete | Backend regression suite and frontend build passed after workflow migration |
