@@ -259,6 +259,21 @@ pytest -q tests/test_regression_api.py tests/test_regression_units.py
 - Input: user-guide review with testcase reference artifacts.
 - Expectation: markdown includes fixed sections for documented features, coverage gaps, clarity issues, defect log, and priority actions.
 
+53. `RG-053` Ollama fallback BDD suite returns expanded scenario count
+- Function: `app.services.generation_service.GenerationService._build_fallback_bdd_test_cases`
+- Input: BDD-mode fallback path after simulated `LLMError` on provider `ollama`.
+- Expectation: fallback output contains at least 24 scenarios (target 28) spanning positive, negative, edge, boundary, security, and performance tags.
+
+54. `RG-054` Ollama fallback path emits diagnostic warning log
+- Function: `app.services.generation_service.GenerationService.generate`
+- Input: forced `LLMError` during Ollama generation.
+- Expectation: warning log includes provider and original error text before deterministic fallback response is returned.
+
+55. `RG-055` Ollama provider timeout configured to 300 seconds
+- Function: `app.services.llm_orchestrator.OllamaProvider.generate` and `generate_stream`
+- Input: inspect AsyncClient configuration during request dispatch.
+- Expectation: both non-stream and stream clients use `timeout=300.0`.
+
 53. `RG-053` User-guide review supports multi-file document context
 - Endpoint: `POST /api/review/user-guide`
 - Input: multiple guide artifacts (`.pdf`, `.docx`, `.md`) attached together with testcase reference file.

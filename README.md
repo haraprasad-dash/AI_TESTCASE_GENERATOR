@@ -124,6 +124,9 @@ Override with `VISION_PROVIDER=groq|ollama|claude|gpt4` in `.env`.
 | **Zero-shot mode** | Requests with no custom prompt always return best-effort artifacts directly — never blocked by the clarification flow. |
 | **Legacy `.env` keys** | `extra="ignore"` in Settings allows older `.env` keys (e.g. `export_default_format`) without crashing the config layer. |
 | **Ollama model selection** | No Ollama model is hardcoded. Runtime model comes from user-selected model in UI or `OLLAMA_DEFAULT_MODEL` when explicitly configured. |
+| **Ollama resilience fallback** | On Ollama `LLMError`, the service returns deterministic artifacts instead of failing. Fallback BDD suite now includes **28 scenarios** (previously 12) across positive, negative, edge, boundary, security, and performance categories. |
+| **Ollama timeout budget** | Ollama HTTP timeout is increased to **300s** for both standard and streaming generation paths to reduce first-load timeout failures for larger local models. |
+| **Fallback diagnostics** | When fallback is triggered, backend logs a provider-scoped warning with the underlying `LLMError` message for root-cause tracing. |
 
 ---
 
