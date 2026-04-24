@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore",
     )
     
     # Application
@@ -39,10 +40,15 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     groq_default_model: str = "llama-3.3-70b-versatile"
     groq_default_temperature: float = 0.2
+    groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     
     # LLM - Ollama
     ollama_base_url: str = "http://localhost:11434"
-    ollama_default_model: str = "llama3.1"
+    ollama_default_model: Optional[str] = None
+    ollama_vision_model: str = "llava"
+
+    # Vision
+    vision_provider: Optional[str] = None  # groq, ollama, claude, gpt4 — auto-detected if unset
 
     # User guide URL fetch auth (optional)
     guide_fetch_cookie: Optional[str] = None

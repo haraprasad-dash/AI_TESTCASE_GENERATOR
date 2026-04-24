@@ -35,7 +35,7 @@ class GroqConfig(BaseModel):
 
 class OllamaConfig(BaseModel):
     base_url: str = "http://localhost:11434"
-    default_model: str = "llama3.1"
+    default_model: Optional[str] = None
 
 
 class LLMConfig(BaseModel):
@@ -95,6 +95,9 @@ class GenerationConfiguration(BaseModel):
     model: Optional[str] = None
     temperature: float = 0.2
     max_tokens: int = 4096
+    top_p: Optional[float] = 0.9
+    frequency_penalty: Optional[float] = 0.0
+    presence_penalty: Optional[float] = 0.0
 
 
 class GenerationRequest(BaseModel):
@@ -210,6 +213,41 @@ class ExportResponse(BaseModel):
     file_path: str
     format: str
     size_bytes: int
+
+
+# ============================================
+# Multi-Modal Document Analysis Models
+# ============================================
+
+class ImageAnalysisResult(BaseModel):
+    filename: str
+    image_path: str
+    description: str
+    objects_detected: List[str]
+    text_content: str
+    relevance_score: float
+    analysis_type: str
+    error: Optional[str] = None
+
+
+class MultiModalDocumentResponse(BaseModel):
+    file_id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    # Text content
+    extracted_text: str
+    page_count: Optional[int] = None
+    # Multi-modal analysis
+    images: List[ImageAnalysisResult] = []
+    visual_context: str = ""
+    # Metadata
+    has_images: bool = False
+    has_tables: bool = False
+    analysis_summary: str = ""
+    # Analysis details
+    enable_vision: bool = True
+    vision_provider: Optional[str] = None
 
 
 # ============================================

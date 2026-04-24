@@ -32,7 +32,7 @@ const defaultSettings: Settings = {
     },
     ollama: {
       baseUrl: 'http://localhost:11434',
-      defaultModel: 'llama3.1',
+      defaultModel: '',
     },
   },
 };

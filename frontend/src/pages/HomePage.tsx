@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Beaker, Settings, Sparkles, FileText, 
   Upload, Zap, ArrowRight
@@ -12,6 +12,7 @@ import { ReviewSection } from '../components/ReviewSection';
 import { ReviewOutput } from '../components/ReviewOutput';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useSettingsStore } from '../store/settingsStore';
 import type {
   FileInput,
   GenerationInputs,
@@ -23,7 +24,11 @@ import type {
 } from '../types';
 
 export const HomePage: React.FC = () => {
-  const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+  const defaultProvider = useSettingsStore((s) => s.llm.defaultProvider);
+  const defaultGroqModel = useSettingsStore((s) => s.llm.groq.defaultModel);
+  const defaultGroqTemperature = useSettingsStore((s) => s.llm.groq.defaultTemperature);
+  const defaultOllamaModel = useSettingsStore((s) => s.llm.ollama.defaultModel);
+  const groqFallbackModel = defaultGroqModel || 'llama-3.3-70b-versatile';
 
   const isGroqRateLimitError = (message?: string) => {
     const m = (message || '').toLowerCase();
@@ -32,7 +37,7 @@ export const HomePage: React.FC = () => {
 
   const friendlyGenerationError = (message?: string) => {
     if (provider === 'groq' && isGroqRateLimitError(message)) {
-      return `Groq quota reached for model '${model}'. Retrying with '${GROQ_FALLBACK_MODEL}' or switch to Ollama.`;
+      return `Groq quota reached for model '${model}'. Retrying with '${groqFallbackModel}' or switch to Ollama.`;
     }
     return message || 'Generation failed';
   };
@@ -54,9 +59,16 @@ export const HomePage: React.FC = () => {
   const [testCasePrompt, setTestCasePrompt] = useState('');
   const [useTestPlanTemplate, setUseTestPlanTemplate] = useState(true);
   const [useTestCaseTemplate, setUseTestCaseTemplate] = useState(true);
-  const [provider, setProvider] = useState<'groq' | 'ollama'>('groq');
-  const [model, setModel] = useState('llama-3.3-70b-versatile');
-  const [temperature, setTemperature] = useState(0.2);
+  const initialProvider: 'groq' | 'ollama' = defaultProvider || 'groq';
+  const [provider, setProvider] = useState<'groq' | 'ollama'>(initialProvider);
+  const [model, setModel] = useState(
+    initialProvider === 'groq'
+      ? (defaultGroqModel || 'llama-3.3-70b-versatile')
+      : (defaultOllamaModel || '')
+  );
+  const [temperature, setTemperature] = useState(
+    initialProvider === 'groq' ? (defaultGroqTemperature ?? 0.2) : 0.2
+  );
   const [clarificationConversation, setClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
   const [reviewClarificationConversation, setReviewClarificationConversation] = useState<Array<{ questions: string[]; answer: string }>>([]);
   const [reviewTestCases, setReviewTestCases] = useState(true);
@@ -76,6 +88,19 @@ export const HomePage: React.FC = () => {
     testPlanPrompt.trim() ||
     testCasePrompt.trim()
   );
+
+  useEffect(() => {
+    const nextProvider: 'groq' | 'ollama' = defaultProvider || 'groq';
+    setProvider(nextProvider);
+    if (nextProvider === 'groq') {
+      setModel(defaultGroqModel || 'llama-3.3-70b-versatile');
+      setTemperature(defaultGroqTemperature ?? 0.2);
+      return;
+    }
+    setModel(defaultOllamaModel || '');
+    setTemperature(0.2);
+  }, [defaultProvider, defaultGroqModel, defaultGroqTemperature, defaultOllamaModel]);
+
   // Keep welcome card stable while typing IDs to avoid layout-shift scroll jumps.
   const showWelcomeCard = !output && uploadedFiles.length === 0;
 
@@ -196,6 +221,9 @@ export const HomePage: React.FC = () => {
         model,
         temperature,
         max_tokens: 4096,
+        top_p: 0.9,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
       };
 
       const response = await api.generate(inputs, configuration);
@@ -206,19 +234,19 @@ export const HomePage: React.FC = () => {
         response.data.status === 'failed' &&
         provider === 'groq' &&
         isGroqRateLimitError(response.data.error) &&
-        model !== GROQ_FALLBACK_MODEL
+        model !== groqFallbackModel
       ) {
         toast('Groq quota reached on selected model. Retrying with fallback model...', { icon: '⏳' });
         const retryConfiguration: GenerationConfiguration = {
           ...configuration,
-          model: GROQ_FALLBACK_MODEL,
+          model: groqFallbackModel,
           max_tokens: 900,
         };
         const retry = await api.generate(inputs, retryConfiguration);
         finalResponse = retry.data;
         if (retry.data.status === 'completed') {
-          setModel(GROQ_FALLBACK_MODEL);
-          toast.success(`Switched to ${GROQ_FALLBACK_MODEL} and completed generation.`);
+          setModel(groqFallbackModel);
+          toast.success(`Switched to ${groqFallbackModel} and completed generation.`);
         }
       }
 

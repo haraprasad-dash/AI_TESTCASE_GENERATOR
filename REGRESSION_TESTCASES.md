@@ -334,3 +334,72 @@ Treat this as required gate before merge:
 - Automated suite passes.
 - Manual smoke checks pass for any changed area.
 - If a regression fails, fix code and rerun all regression cases.
+
+---
+
+59. `RG-059` settings.extra=ignore allows unknown .env keys without crashing
+- Function: `app.config.Settings`
+- Input: .env containing extra keys like `export_default_format`, `test_plan_template_path`.
+- Expectation: Settings loads successfully without `Extra inputs are not permitted` Pydantic error.
+
+60. `RG-060` GenerationConfiguration accepts advanced Groq sampling params
+- Model: `app.models.GenerationConfiguration`
+- Input: `top_p=0.9`, `frequency_penalty=0.0`, `presence_penalty=0.0`.
+- Expectation: fields are accepted, defaulted when absent, and pass cleanly to orchestrator.
+
+61. `RG-061` LLMConfig propagates top_p/frequency/presence to GroqProvider.generate
+- Function: `app.services.llm_orchestrator.LLMOrchestrator.generate`
+- Expectation: provider.generate is called with `top_p`, `frequency_penalty`, `presence_penalty` matching config.
+
+62. `RG-062` Groq API call includes advanced sampling params in payload
+- Function: `app.services.llm_orchestrator.GroqProvider.generate`
+- Expectation: `client.chat.completions.create` receives `top_p`, `frequency_penalty`, `presence_penalty`.
+
+63. `RG-063` Sectioned generation activates when initial test-case output is weak
+- Function: `app.services.generation_service.GenerationService._generate_test_cases`
+- Expectation: when initial output fails `_is_weak_test_cases`, `_generate_test_cases_sectioned` is called.
+
+64. `RG-064` Sectioned generation merges positive/negative, edge/boundary, security/performance
+- Function: `app.services.generation_service.GenerationService._generate_test_cases_sectioned`
+- Expectation: merged output contains content from all three section groups.
+
+65. `RG-065` Zero-shot scenario never triggers clarification flow
+- Function: `app.services.generation_service.GenerationService._should_require_clarification`
+- Input: empty `custom_prompt`, valid test plan and cases content.
+- Expectation: returns `False` unconditionally for zero-shot requests.
+
+66. `RG-066` No hardcoded Ollama default model in backend settings model
+- Model: `app.models.OllamaConfig`
+- Input: instantiate `OllamaConfig()` with no model provided.
+- Expectation: `default_model` remains `None`; no implicit `llama3.1`/`qwen` literal is injected.
+
+67. `RG-067` create_orchestrator fails fast when provider model is unset
+- Function: `app.services.llm_orchestrator.create_orchestrator`
+- Input: provider=`ollama` with no request model and no `OLLAMA_DEFAULT_MODEL` configured.
+- Expectation: returns actionable `LLMError` instead of silently selecting a hardcoded model.
+
+68. `RG-068` Settings save path does not hardcode OLLAMA_DEFAULT_MODEL
+- Endpoint: `PUT /api/settings`
+- Input: `llm.ollama.default_model` empty.
+- Expectation: `OLLAMA_DEFAULT_MODEL` is cleared/omitted, not replaced with `llama3.1`.
+
+69. `RG-069` UI initializes Ollama model from saved settings only
+- File: `frontend/src/pages/HomePage.tsx`
+- Input: provider=ollama with empty saved default model.
+- Expectation: model state initializes empty and is filled only by live model-list selection.
+
+## Free Vision Provider Regression Tests
+
+| ID | Test | Automated | File |
+|----|------|-----------|------|
+| REG-VISION-001 | Auto-detect picks Groq when `GROQ_API_KEY` set | ✅ | `test_regression_units.py` |
+| REG-VISION-002 | Auto-detect defaults to Groq when no provider available | ✅ | `test_regression_units.py` |
+| REG-VISION-003 | Groq default model is Llama 4 Scout | ✅ | `test_regression_units.py` |
+| REG-VISION-004 | `effective_model` returns explicit model when set | ✅ | `test_regression_units.py` |
+
+### Manual Smoke Checks (Vision)
+
+1. Set only `GROQ_API_KEY`, upload PDF with images → vision analysis uses Groq provider.
+2. Remove all API keys, start Ollama with `llava` → vision auto-detects Ollama.
+3. Call `GET /api/vision/health` → shows correct provider availability status.
+4. Call `GET /api/vision/providers` → lists 4 providers with correct tier labels.

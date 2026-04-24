@@ -85,6 +85,9 @@ class GenerationService:
                 provider=config.provider,
                 model=selected_model,
                 temperature=config.temperature,
+                top_p=config.top_p,
+                frequency_penalty=config.frequency_penalty,
+                presence_penalty=config.presence_penalty,
                 api_key=settings.groq_api_key if config.provider == "groq" else None,
                 base_url=settings.ollama_base_url if config.provider == "ollama" else None
             )
@@ -258,6 +261,9 @@ class GenerationService:
                                 provider=spec["provider"],
                                 model=spec["model"],
                                 temperature=config.temperature,
+                                top_p=config.top_p,
+                                frequency_penalty=config.frequency_penalty,
+                                presence_penalty=config.presence_penalty,
                                 api_key=settings.groq_api_key if spec["provider"] == "groq" else None,
                                 base_url=settings.ollama_base_url if spec["provider"] == "ollama" else None,
                             )
@@ -311,6 +317,91 @@ class GenerationService:
                                 ),
                                 metadata=GenerationMetadata(
                                     model_used=f"{spec['provider']}/{spec['model']}",
+                                    temperature=config.temperature,
+                                    total_tokens=(test_plan.total_tokens or 0) + (test_cases.total_tokens or 0),
+                                    sources=sources,
+                                    clarification_required=clarification_required,
+                                    clarification_questions=clarification_questions,
+                                ),
+                            )
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            # Fallback: if Ollama hits timeout/model-not-found/connection issues,
+            # retry with lower token budget and a stable local fallback model.
+            if config.provider == "ollama":
+                try:
+                    from app.config import get_settings
+                    settings = get_settings()
+                    retry_specs = self._build_ollama_retry_specs(
+                        error_message=str(e),
+                        requested_model=config.model,
+                        ollama_default_model=settings.ollama_default_model,
+                    )
+
+                    for spec in retry_specs:
+                        try:
+                            fallback_orchestrator = create_orchestrator(
+                                provider="ollama",
+                                model=spec["model"],
+                                temperature=config.temperature,
+                                top_p=config.top_p,
+                                frequency_penalty=config.frequency_penalty,
+                                presence_penalty=config.presence_penalty,
+                                base_url=settings.ollama_base_url,
+                            )
+                            fallback_orchestrator.config.max_tokens = spec["max_tokens"]
+
+                            plan_prompt = self._resolve_section_prompt(inputs.test_plan_prompt, inputs.custom_prompt)
+                            case_prompt = self._resolve_section_prompt(inputs.test_case_prompt, inputs.custom_prompt)
+                            test_plan = await self._generate_test_plan(
+                                fallback_orchestrator,
+                                context,
+                                plan_prompt,
+                                inputs.use_test_plan_template,
+                            )
+                            test_cases = await self._generate_test_cases(
+                                fallback_orchestrator,
+                                context,
+                                case_prompt,
+                                inputs.use_test_case_template,
+                            )
+
+                            combined_output = f"{test_plan.content}\n\n{test_cases.content}"
+                            clarification_questions = self._extract_clarification_questions(combined_output)
+                            clarification_required = self._should_require_clarification(
+                                inputs.custom_prompt,
+                                test_plan.content,
+                                test_cases.content,
+                                clarification_questions,
+                            )
+                            if clarification_required and not clarification_questions:
+                                clarification_questions = self._default_clarification_questions(inputs.custom_prompt)
+                            total_time = int((time.time() - start_time) * 1000)
+
+                            return GenerationResponse(
+                                request_id=request_id,
+                                status="completed",
+                                timestamp=datetime.utcnow(),
+                                outputs=GenerationOutputs(
+                                    test_plan=GenerationOutput(
+                                        content=test_plan.content,
+                                        format="markdown",
+                                        token_usage=test_plan.total_tokens,
+                                        generation_time_ms=total_time // 2,
+                                    ),
+                                    test_cases=TestCasesOutput(
+                                        content="" if clarification_required else test_cases.content,
+                                        format="markdown",
+                                        count=0 if clarification_required else self._count_test_cases(test_cases.content),
+                                        token_usage=test_cases.total_tokens,
+                                        generation_time_ms=total_time // 2,
+                                    ),
+                                ),
+                                metadata=GenerationMetadata(
+                                    model_used=f"ollama/{spec['model']}",
                                     temperature=config.temperature,
                                     total_tokens=(test_plan.total_tokens or 0) + (test_cases.total_tokens or 0),
                                     sources=sources,
@@ -464,18 +555,23 @@ class GenerationService:
         return "\n".join(parts)
 
     def _safe_max_tokens(self, requested: int, provider: str, model: str) -> int:
-        """Clamp completion tokens to provider-safe defaults."""
-        requested = max(256, requested or 1024)
+        """Clamp completion tokens to provider-safe defaults.
+
+        Groq-hosted llama-3.3-70b-versatile supports 32 768 context tokens.
+        Previous 1 200-token cap caused truncated / thin outputs.  Now we
+        allow up to 4 096 completion tokens for standard models while still
+        keeping a conservative cap for GPT-OSS models with tighter TPM.
+        """
+        requested = max(256, requested or 4096)
 
         if provider == "groq":
-            # Keep completion budget conservative to avoid 413 TPM failures.
-            # Model-specific override for GPT-OSS models shown to have tight TPM in this app.
             if "gpt-oss" in (model or ""):
                 return min(requested, 450)
-            return min(requested, 1200)
+            # Standard Groq models (llama-3.x, mixtral): allow full user budget.
+            return min(requested, 4096)
 
         # Ollama local models can become very slow on large completions.
-        return min(requested, 1400)
+        return min(requested, 4096)
 
     def _is_rate_limit_error(self, message: str) -> bool:
         lower = (message or "").lower()
@@ -501,6 +597,9 @@ class GenerationService:
         retired_prefixes = [
             "deepseek-r1-distill-qwen-32b",
             "deepseek-r1-distill-llama-70b",
+            "mixtral-8x7b-32768",
+            "llama-3.1-70b-versatile",
+            "llama-3.1-8b-instant",
         ]
         normalized = requested_model.strip().lower()
         if any(normalized == p for p in retired_prefixes):
@@ -581,8 +680,8 @@ class GenerationService:
         if self._is_decommissioned_model_error(error_message):
             for fallback_model in [
                 "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
-                "mixtral-8x7b-32768",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "openai/gpt-oss-120b",
             ]:
                 if fallback_model != model:
                     specs.append({
@@ -591,11 +690,52 @@ class GenerationService:
                         "max_tokens": 700,
                     })
 
+            configured_ollama = (ollama_default_model or "").strip()
+            if configured_ollama:
+                specs.append({
+                    "provider": "ollama",
+                    "model": configured_ollama,
+                    "max_tokens": 700,
+                })
+
+        return specs
+
+    def _build_ollama_retry_specs(
+        self,
+        error_message: str,
+        requested_model: Optional[str],
+        ollama_default_model: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Build Ollama retry strategy.
+
+        Policy:
+        - Timeout or heavy-load errors: retry same model with reduced max_tokens once.
+        - Missing model errors: retry with configured default model (if present).
+        - Connection errors: no retry specs; return actionable error to user.
+        """
+        model = requested_model or ollama_default_model or ""
+        lower = (error_message or "").lower()
+        specs: List[Dict[str, Any]] = []
+
+        if "cannot connect to ollama" in lower or "connection refused" in lower:
+            return specs
+
+        if self._is_timeout_error(error_message):
+            if not model:
+                return specs
             specs.append({
-                "provider": "ollama",
-                "model": ollama_default_model or "llama3.1",
-                "max_tokens": 700,
+                "model": model,
+                "max_tokens": 1200,
             })
+            return specs
+
+        if "model" in lower and ("not found" in lower or "does not exist" in lower):
+            configured = (ollama_default_model or "").strip()
+            if configured and configured != model:
+                specs.append({
+                    "model": configured,
+                    "max_tokens": 1200,
+                })
 
         return specs
 
@@ -613,6 +753,23 @@ class GenerationService:
                 f"Groq rate limit reached for model '{model}'. "
                 "Please switch model/provider (recommended: Ollama local) or retry later."
             )
+        if provider == "ollama":
+            lower = (raw_error or "").lower()
+            if "cannot connect to ollama" in lower or "connection refused" in lower:
+                return (
+                    "Cannot connect to Ollama. Please ensure Ollama is running and reachable at OLLAMA_BASE_URL "
+                    "(default http://localhost:11434), then retry."
+                )
+            if "model" in lower and ("not found" in lower or "does not exist" in lower):
+                return (
+                    f"Ollama model '{model}' is not installed. Run: ollama pull {model} "
+                    "or switch to an installed model from AI Configuration."
+                )
+            if self._is_timeout_error(raw_error):
+                return (
+                    f"Ollama request timed out for model '{model}'. "
+                    "Try again with lower max tokens or use a lighter model."
+                )
         return raw_error
 
     def _apply_context_budget(self, context: str, provider: str, model: str = "") -> str:
@@ -624,11 +781,14 @@ class GenerationService:
         def est_tokens(text: str) -> int:
             return max(1, len(text) // 4)
 
-        # Groq TPM errors observed around 8k; reserve room for template/system/output.
+        # Groq llama-3.3-70b has 32k context; allow generous input budget.
+        # GPT-OSS models still have tight TPM — keep them conservative.
         if provider == "groq" and "gpt-oss" in (model or ""):
             max_context_tokens = 900
+        elif provider == "groq":
+            max_context_tokens = 6000
         else:
-            max_context_tokens = 2200 if provider == "groq" else 3000
+            max_context_tokens = 6000
         if est_tokens(context) <= max_context_tokens:
             return context
 
@@ -753,6 +913,19 @@ class GenerationService:
             system_prompt=self._get_test_case_system_prompt(bdd_mode)
         )
 
+        # Groq quality optimization: for thin or incomplete outputs, switch to
+        # sectioned generation by coverage group and merge results.
+        if self._is_weak_test_cases(response.content, bdd_mode):
+            sectioned = await self._generate_test_cases_sectioned(
+                orchestrator=orchestrator,
+                context=context,
+                custom_prompt=custom_prompt,
+                include_template=include_template,
+                bdd_mode=bdd_mode,
+            )
+            if not self._is_weak_test_cases(sectioned.content, bdd_mode):
+                response = sectioned
+
         # If user already clarified missing artifacts are unavailable,
         # do one forced best-effort retry instead of asking same questions again.
         if (
@@ -816,6 +989,82 @@ class GenerationService:
             if self._is_weak_test_cases(response.content, False):
                 response.content = self._build_fallback_table_test_cases(context, custom_prompt)
         return response
+
+    async def _generate_test_cases_sectioned(
+        self,
+        orchestrator: LLMOrchestrator,
+        context: str,
+        custom_prompt: Optional[str],
+        include_template: bool,
+        bdd_mode: bool,
+    ) -> LLMResponse:
+        """Generate cases in focused category calls and merge into one output."""
+        base_prompt = self._build_test_case_prompt(context, custom_prompt, include_template)
+        system_prompt = self._get_test_case_system_prompt(bdd_mode)
+
+        section_instructions = [
+            (
+                "positive_negative",
+                "Generate ONLY Positive and Negative categories. Minimum 8 total scenarios/cases."
+            ),
+            (
+                "edge_boundary",
+                "Generate ONLY Edge Case and Boundary categories. Minimum 6 total scenarios/cases, including at least 2 boundary-focused data-driven cases."
+            ),
+            (
+                "security_performance",
+                "Generate ONLY Security and Performance categories. Minimum 6 total scenarios/cases. Include authz, XSS/injection, response time, and large dataset behavior."
+            ),
+        ]
+
+        merged_parts: List[str] = []
+        sum_prompt_tokens = 0
+        sum_completion_tokens = 0
+        sum_total_tokens = 0
+        model_name = orchestrator.config.model
+
+        for section_name, section_rule in section_instructions:
+            section_prompt = (
+                f"{base_prompt}\n\n"
+                "# SECTIONED GENERATION MODE\n"
+                f"Section: {section_name}\n"
+                f"{section_rule}\n"
+                "Do not ask clarifying questions. Proceed with explicit assumptions where needed."
+            )
+            section_resp = await orchestrator.generate(
+                prompt=section_prompt,
+                system_prompt=system_prompt,
+            )
+            model_name = section_resp.model or model_name
+            sum_prompt_tokens += section_resp.prompt_tokens or 0
+            sum_completion_tokens += section_resp.completion_tokens or 0
+            sum_total_tokens += section_resp.total_tokens or 0
+
+            content = self._sanitize_generated_content(section_resp.content or "")
+            if bdd_mode:
+                content = self._repair_truncated_bdd_tail(self._normalize_bdd_content(content))
+                content = self._strip_markdown_fence(content)
+            merged_parts.append(content)
+
+        merged_content = "\n\n".join([part for part in merged_parts if part.strip()])
+        if bdd_mode:
+            merged_content = self._ensure_gherkin_fence(merged_content)
+
+        return LLMResponse(
+            content=merged_content,
+            model=model_name,
+            provider=orchestrator.config.provider,
+            prompt_tokens=sum_prompt_tokens or None,
+            completion_tokens=sum_completion_tokens or None,
+            total_tokens=sum_total_tokens or None,
+        )
+
+    def _strip_markdown_fence(self, content: str) -> str:
+        """Remove surrounding markdown code fences from generated sections."""
+        text = (content or "").strip()
+        text = re.sub(r'^```[a-zA-Z0-9_-]*\s*\n?', '', text)
+        text = re.sub(r'\n?```\s*$', '', text)
+        return text.strip()
     
     def _build_test_plan_prompt(self, context: str, custom_prompt: Optional[str], include_template: bool = True) -> str:
         """Build test plan generation prompt."""
@@ -851,9 +1100,12 @@ class GenerationService:
             "\n".join(instruction_priority),
             "",
             "# MINIMUM OUTPUT QUALITY",
-            "- Return a complete test plan (not prompt template text).",
-            "- Include clear sections, risks, entry/exit criteria, and coverage matrix.",
-            "- If details are missing, proceed with explicit assumptions.",
+            "- Return a complete, production-grade test plan (not prompt template text).",
+            "- Include ALL standard sections: Introduction, Scope, Objectives, Test Items, Test Approach, Environment, Entry/Exit Criteria, Risks, Schedule, Deliverables.",
+            "- Test Approach must include a Test Types Matrix covering: Functional Positive, Functional Negative, Boundary, Edge Case, Security, Performance.",
+            "- Risk Assessment must include at least 3 specific risks with mitigations.",
+            "- Entry/Exit criteria must be measurable and specific.",
+            "- If details are missing, state explicit assumptions and proceed.",
             "",
             "\n".join(source_traceability),
             "",
@@ -897,9 +1149,11 @@ class GenerationService:
             "\n".join(instruction_priority),
             "",
             "# MINIMUM OUTPUT QUALITY",
-            "- Return finished test cases (not prompt template text).",
-            "- Cover functional, negative, boundary, and edge scenarios.",
-            "- If details are missing, proceed with explicit assumptions.",
+            "- Return finished, executable test cases (not prompt template text).",
+            "- Cover ALL 6 mandatory categories: Positive, Negative, Edge Case, Boundary Value, Security, Performance.",
+            "- Minimum 20 test cases/scenarios total.",
+            "- Each test case must have concrete steps and specific expected results.",
+            "- If details are missing, state explicit assumptions and proceed.",
             "",
             "# CUSTOM INSTRUCTIONS",
             custom_instructions or "Generate detailed test cases based on the above requirements.",
@@ -931,58 +1185,92 @@ class GenerationService:
     
     def _get_test_plan_system_prompt(self) -> str:
         """Get system prompt for test plan generation."""
-        return """You are an expert Test Architect. Create a comprehensive Test Plan based on the provided requirements.
+        return """You are a Principal Test Architect with 15+ years of experience writing IEEE 829-compliant test plans for enterprise software releases.
 
-Instruction precedence:
+INSTRUCTION PRECEDENCE:
 - User CUSTOM INSTRUCTIONS are highest priority.
 - Follow context facts next.
 - Treat any template as guidance, not strict requirements.
 
-Follow these principles:
-1. Analyze requirements thoroughly before writing
-2. Use IEEE 829 standard structure
-3. Define clear test objectives and scope
-4. Include risk assessment and mitigation
-5. Specify entry and exit criteria
-6. Define test environment requirements
+MANDATORY OUTPUT STRUCTURE — produce ALL of these sections:
+1. Introduction (with Source Reference, Scope In/Out)
+2. Test Objectives (primary, secondary, quality goals)
+3. Test Items (table: Item ID, Feature, Priority, Description)
+4. Test Approach (test levels table + test types matrix covering Functional, Negative, Boundary, Edge, Security, Performance)
+5. Test Environment (table: component, details)
+6. Entry and Exit Criteria (checklist format with specific, measurable criteria)
+7. Risk Assessment (table: Risk ID, Description, Impact, Probability, Mitigation)
+8. Test Schedule (table: Phase, Start, End, Owner)
+9. Assumptions and Dependencies
+10. Deliverables
 
-Output in professional Markdown format."""
+QUALITY RULES:
+- Every section must contain substantive content, not just headers.
+- Include at least 3 risks with specific mitigations.
+- Entry/exit criteria must be measurable (not vague).
+- Test types matrix must cover at minimum: Functional Positive, Functional Negative, Boundary, Edge Case, Security, Performance.
+- Use Markdown tables for structured data.
+- Be specific to the actual feature described in the requirements — do not produce generic filler.
+- If details are missing from the requirements, state explicit assumptions and proceed.
+
+Output in professional Markdown format. Do NOT return prompt templates or placeholder text."""
     
     def _get_test_case_system_prompt(self, bdd_mode: bool = False) -> str:
         """Get system prompt for test case generation."""
         if bdd_mode:
-            return """You are an expert Test Engineer. Create detailed BDD test cases based on the provided requirements.
+            return """You are a Principal SDET specializing in BDD test automation. Generate comprehensive, automation-ready Gherkin test scenarios.
 
-Instruction precedence:
+INSTRUCTION PRECEDENCE:
 - User CUSTOM INSTRUCTIONS are highest priority.
 - Follow context facts next.
 - Treat any template as guidance, not strict requirements.
 
-Follow these principles:
-1. Output Gherkin only: Feature, Scenario, Given, When, Then (And optional)
-2. Include positive, negative, boundary, and edge scenarios where relevant
-3. Keep steps concrete and executable
-4. Do not output markdown tables
-5. Do not output HTML tags like <br>
+MANDATORY COVERAGE — generate scenarios for ALL of these categories:
+1. POSITIVE / HAPPY PATH (at least 4 scenarios): Standard expected user flows
+2. NEGATIVE / ERROR HANDLING (at least 4 scenarios): Invalid inputs, unauthorized access, missing data
+3. EDGE CASES (at least 3 scenarios): Empty states, max/min limits, special characters, concurrent access
+4. BOUNDARY VALUES (at least 2 scenarios): At limits, just below/above limits (use Scenario Outline with Examples table)
+5. SECURITY (at least 2 scenarios): XSS, injection, authorization, session handling
+6. PERFORMANCE (at least 2 scenarios): Response time, load behavior, large dataset handling
+
+OUTPUT FORMAT RULES:
+- Output Gherkin ONLY: Feature, Background, Scenario, Scenario Outline, Given/When/Then/And
+- Use tags: @Positive, @Negative, @EdgeCase, @Boundary, @Security, @Performance, @P0/@P1/@P2
+- Include at least 1 Background block with common preconditions
+- Include at least 3 Scenario Outline blocks with Examples tables for data-driven coverage
+- Keep steps concrete and executable — no vague steps like "verify it works"
+- Do NOT output markdown tables
+- Do NOT use HTML tags such as <br>
+- Target: 20-30 total scenarios minimum
 
 Output in clean plain text Gherkin format."""
 
-        return """You are an expert Test Engineer. Create detailed Test Cases based on the provided requirements.
+        return """You are a Principal SDET with deep expertise in systematic test case design. Generate comprehensive, executable test cases.
 
-Instruction precedence:
+INSTRUCTION PRECEDENCE:
 - User CUSTOM INSTRUCTIONS are highest priority.
 - Follow context facts next.
 - Treat any template as guidance, not strict requirements.
 
-Follow these principles:
-1. Include positive (happy path) test cases
-2. Include negative (error handling) test cases
-3. Add boundary value analysis cases
-4. Include edge cases and corner cases
-5. Use Given-When-Then format where applicable
-6. Define clear preconditions and expected results
-7. Assign priority (High/Medium/Low) to each case
-8. Do not output HTML tags like <br>
+MANDATORY COVERAGE — generate test cases for ALL of these categories:
+1. FUNCTIONAL POSITIVE (at least 5 cases): Happy path, standard user workflows
+2. FUNCTIONAL NEGATIVE (at least 5 cases): Invalid inputs, error handling, unauthorized actions
+3. BOUNDARY VALUE (at least 3 cases): Min/max limits, just below/above thresholds
+4. EDGE CASES (at least 3 cases): Empty states, special characters, concurrent operations
+5. SECURITY (at least 3 cases): XSS, injection, authorization checks, session handling
+6. PERFORMANCE (at least 2 cases): Response time, rendering under load, large dataset behavior
+
+OUTPUT FORMAT — use Markdown tables with these columns:
+| Test ID | Category | Description | Preconditions | Steps | Expected Result | Priority |
+
+QUALITY RULES:
+- Every test case must have concrete, executable steps (not vague descriptions)
+- Expected results must be specific and verifiable
+- Preconditions must be stated explicitly
+- Assign priority: P0 (Critical), P1 (High), P2 (Medium), P3 (Low)
+- Group test cases under category headers (## Functional Positive, ## Negative, etc.)
+- Target: 25-35 total test cases minimum
+- Do NOT output HTML tags like <br>
 
 Output in professional Markdown format with tables."""
 
@@ -1150,6 +1438,11 @@ Output in professional Markdown format with tables."""
         clarification_questions: List[str],
     ) -> bool:
         """Decide if we should switch UI into clarification flow instead of showing incomplete cases."""
+        # Zero-shot mode should return best-effort outputs directly instead of
+        # repeatedly blocking on clarification requests.
+        if not (custom_prompt and custom_prompt.strip()):
+            return False
+
         if self._has_user_clarification_response(custom_prompt) and self._user_declined_missing_artifacts(custom_prompt):
             if test_cases_content.strip():
                 return False

@@ -84,7 +84,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             },
             ollama: {
               baseUrl: remote?.llm?.ollama?.base_url || 'http://localhost:11434',
-              defaultModel: remote?.llm?.ollama?.default_model || 'llama3.1',
+              defaultModel: remote?.llm?.ollama?.default_model || '',
             },
           },
         });

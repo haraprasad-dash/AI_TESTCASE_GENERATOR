@@ -36,6 +36,9 @@ class LLMConfig:
     model: str
     temperature: float = 0.2
     max_tokens: int = 4096
+    top_p: Optional[float] = 0.9
+    frequency_penalty: Optional[float] = 0.0
+    presence_penalty: Optional[float] = 0.0
     # Provider-specific settings
     api_key: Optional[str] = None  # For Groq
     base_url: Optional[str] = None  # For Ollama
@@ -74,13 +77,16 @@ class GroqProvider(LLMProvider):
     GROQ_MODELS = [
         "openai/gpt-oss-120b",
         "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
     ]
 
     # Known retired/decommissioned Groq model ids that should never be shown.
     DECOMMISSIONED_MODELS = {
         "deepseek-r1-distill-qwen-32b",
         "deepseek-r1-distill-llama-70b",
+        "mixtral-8x7b-32768",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
     }
     
     def __init__(self, api_key: str):
@@ -93,7 +99,10 @@ class GroqProvider(LLMProvider):
         system_prompt: Optional[str] = None,
         model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.2,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        top_p: Optional[float] = 0.9,
+        frequency_penalty: Optional[float] = 0.0,
+        presence_penalty: Optional[float] = 0.0,
     ) -> LLMResponse:
         """Generate using Groq API."""
         messages = []
@@ -106,7 +115,10 @@ class GroqProvider(LLMProvider):
                 model=model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
             )
             
             return LLMResponse(
@@ -131,7 +143,10 @@ class GroqProvider(LLMProvider):
         system_prompt: Optional[str] = None,
         model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.2,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        top_p: Optional[float] = 0.9,
+        frequency_penalty: Optional[float] = 0.0,
+        presence_penalty: Optional[float] = 0.0,
     ) -> AsyncIterator[str]:
         """Generate streaming response from Groq."""
         messages = []
@@ -145,6 +160,9 @@ class GroqProvider(LLMProvider):
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
                 stream=True
             )
             
@@ -211,14 +229,19 @@ class OllamaProvider(LLMProvider):
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "llama3.1",
+        model: Optional[str] = None,
         temperature: float = 0.2,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        top_p: Optional[float] = 0.9,
+        frequency_penalty: Optional[float] = 0.0,
+        presence_penalty: Optional[float] = 0.0,
     ) -> LLMResponse:
         """Generate using Ollama API."""
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
+        if not model:
+            raise LLMError("No Ollama model configured. Select a model in AI Configuration or set OLLAMA_DEFAULT_MODEL.")
         
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -230,7 +253,11 @@ class OllamaProvider(LLMProvider):
                         "stream": False,
                         "options": {
                             "temperature": temperature,
-                            "num_predict": max_tokens
+                            "num_predict": max_tokens,
+                            "top_p": top_p,
+                            # Ollama has no direct OpenAI-style frequency/presence penalties.
+                            # Keep API compatibility by passing a bounded repeat penalty.
+                            "repeat_penalty": max(1.0, 1.0 + float((frequency_penalty or 0.0) * 0.1)),
                         }
                     }
                 )
@@ -255,14 +282,19 @@ class OllamaProvider(LLMProvider):
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "llama3.1",
+        model: Optional[str] = None,
         temperature: float = 0.2,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        top_p: Optional[float] = 0.9,
+        frequency_penalty: Optional[float] = 0.0,
+        presence_penalty: Optional[float] = 0.0,
     ) -> AsyncIterator[str]:
         """Generate streaming response from Ollama."""
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
+        if not model:
+            raise LLMError("No Ollama model configured. Select a model in AI Configuration or set OLLAMA_DEFAULT_MODEL.")
         
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -275,7 +307,9 @@ class OllamaProvider(LLMProvider):
                         "stream": True,
                         "options": {
                             "temperature": temperature,
-                            "num_predict": max_tokens
+                            "num_predict": max_tokens,
+                            "top_p": top_p,
+                            "repeat_penalty": max(1.0, 1.0 + float((frequency_penalty or 0.0) * 0.1)),
                         }
                     }
                 ) as response:
@@ -375,7 +409,10 @@ class LLMOrchestrator:
             system_prompt=system_prompt,
             model=self.config.model,
             temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens
+            max_tokens=self.config.max_tokens,
+            top_p=self.config.top_p,
+            frequency_penalty=self.config.frequency_penalty,
+            presence_penalty=self.config.presence_penalty,
         )
     
     async def generate_stream(
@@ -389,7 +426,10 @@ class LLMOrchestrator:
             system_prompt=system_prompt,
             model=self.config.model,
             temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens
+            max_tokens=self.config.max_tokens,
+            top_p=self.config.top_p,
+            frequency_penalty=self.config.frequency_penalty,
+            presence_penalty=self.config.presence_penalty,
         ):
             yield chunk
     
@@ -406,16 +446,29 @@ def create_orchestrator(
     provider: str,
     model: Optional[str] = None,
     temperature: float = 0.2,
+    top_p: Optional[float] = 0.9,
+    frequency_penalty: Optional[float] = 0.0,
+    presence_penalty: Optional[float] = 0.0,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None
 ) -> LLMOrchestrator:
     """Factory function to create orchestrator from settings."""
     provider_type = ProviderType(provider)
+    from app.config import get_settings
+
+    settings = get_settings()
+    default_model = settings.groq_default_model if provider_type == ProviderType.GROQ else settings.ollama_default_model
+    resolved_model = (model or default_model or "").strip()
+    if not resolved_model:
+        raise LLMError(f"No model configured for provider '{provider_type.value}'.")
     
     config = LLMConfig(
         provider=provider_type,
-        model=model or ("llama-3.3-70b-versatile" if provider_type == ProviderType.GROQ else "llama3.1"),
+        model=resolved_model,
         temperature=temperature,
+        top_p=top_p,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty,
         api_key=api_key,
         base_url=base_url
     )

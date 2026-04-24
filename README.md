@@ -73,12 +73,57 @@ Requirements:
 | Word / DOCX | Full text and table extraction |
 | Images (PNG/JPG) | OCR-powered text recognition |
 
+### 🎨 Vision & Multi-Modal Analysis (NEW)
+
+| Capability | Description |
+|------------|-------------|
+| **Image Analysis** | Semantic understanding of UI screenshots, diagrams, charts |
+| **PDF Image Extraction** | Extract and analyze images embedded in PDFs |
+| **Multi-Modal Context** | Combines text, tables, and visual understanding for test generation |
+| **UI-Aware Testing** | Test cases understand UI components from mockups |
+| **Architecture Understanding** | System diagrams analyzed for integration testing |
+| **Data Visualization** | Charts analyzed for test data and thresholds |
+
+#### Vision Providers (auto-detected)
+
+| Provider | Tier | Model | Requirement |
+|----------|------|-------|-------------|
+| **Groq Cloud** | FREE ⭐ | Llama 4 Scout 17B | `GROQ_API_KEY` (reuses existing key) |
+| **Ollama** | FREE | LLaVA, Gemma 3, Llama 3.2 Vision | Ollama running + `ollama pull llava` |
+| **Claude Vision** | Paid | Claude 3.5 Sonnet | `ANTHROPIC_API_KEY` |
+| **GPT-4 Vision** | Paid | GPT-4V | `OPENAI_API_KEY` |
+
+Auto-detect priority: Groq → Ollama → Claude → GPT-4V → OCR fallback.
+Override with `VISION_PROVIDER=groq|ollama|claude|gpt4` in `.env`.
+
+> **See:** [VISION_QUICKSTART.md](VISION_QUICKSTART.md) for setup instructions
+
 ### LLM Providers
 
 | Provider | Mode | Notes |
 |----------|------|-------|
 | **Groq Cloud** | Cloud | Fast inference — Llama 3.3, Mixtral, etc. Requires API key |
 | **Ollama** | Local | Private, offline. No API key. Requires local install |
+
+#### Supported Groq Models (Active)
+
+| Model | Recommended For |
+|-------|----------------|
+| `llama-3.3-70b-versatile` | Best quality — highest reasoning capability |
+| `openai/gpt-oss-120b` | Fast, low token budget |
+| `meta-llama/llama-4-scout-17b-16e-instruct` | Vision + generation tasks |
+
+> **Decommissioned (do not use):** `mixtral-8x7b-32768`, `llama-3.1-70b-versatile`, `llama-3.1-8b-instant` — these are no longer available on Groq. The app automatically filters them from fallback chains.
+
+#### Advanced Generation Behavior
+
+| Behavior | Detail |
+|----------|--------|
+| **Advanced sampling** | `top_p=0.9`, `frequency_penalty=0.0`, `presence_penalty=0.0` sent to Groq by default. Pass custom values in `GenerationConfiguration`. |
+| **Sectioned generation** | When initial test-case output is thin (weak coverage or low count), the system automatically makes 3 focused API calls (positive/negative, edge/boundary, security/performance) and merges the results. |
+| **Zero-shot mode** | Requests with no custom prompt always return best-effort artifacts directly — never blocked by the clarification flow. |
+| **Legacy `.env` keys** | `extra="ignore"` in Settings allows older `.env` keys (e.g. `export_default_format`) without crashing the config layer. |
+| **Ollama model selection** | No Ollama model is hardcoded. Runtime model comes from user-selected model in UI or `OLLAMA_DEFAULT_MODEL` when explicitly configured. |
 
 ---
 
@@ -321,6 +366,7 @@ Choose one or more sources:
 | **Provider** | Groq (fast) or Ollama (private) |
 | **Model** | `llama-3.3-70b-versatile` for best quality |
 | **Temperature** | `0.2` for formal docs, `0.5` for brainstorming |
+| **Advanced params** | `top_p`, `frequency_penalty`, `presence_penalty` available in `GenerationConfiguration` |
 
 Click **Test Connection** to verify your AI config before generating.
 
@@ -513,10 +559,53 @@ The model list in UI is loaded dynamically from Groq live availability and known
 ### Ollama Models (Local)
 
 ```bash
-ollama pull llama3.2        # 3B — fast, lightweight
-ollama pull codellama       # code/test-focused
-ollama pull llama3.1        # 8B — better quality
+ollama pull qwen2.5:14b-instruct   # recommended for testcase generation
+ollama pull qwen2.5:32b-instruct   # higher quality, slower
+ollama pull llama3.1               # fallback
 ```
+
+Notes:
+- The app does not force any Ollama model id.
+- Choose an installed model from AI Configuration, or set `OLLAMA_DEFAULT_MODEL` in settings/.env.
+
+### Vision Provider (Multi-Modal PDFs)
+
+The **Vision Provider** is **independent** of the LLM Provider. Auto-detected priority: **Groq → Ollama → Claude → GPT-4V**.
+
+| Setting | Purpose | Can Use With |
+|---------|---------|--------------|
+| **LLM Provider** (Groq/Ollama) | Test case generation | **Groq** ✅ or **Ollama** ✅ |
+| **Vision Provider** (Groq/Ollama/Claude/GPT-4V) | Image analysis in PDFs | **Any LLM provider** ✅ |
+
+**Example configurations:**
+- ✅ Groq LLM + Groq Vision (fast generation + free image analysis) ← **Recommended FREE setup**
+- ✅ Ollama LLM + Ollama Vision (fully local + private)
+- ✅ Groq + Claude Vision (fast generation + premium images)
+- ✅ Any LLM + No vision (text-only mode) ← **Works immediately**
+
+**To use PDFs with images:**
+
+```env
+# Test generation (choose one)
+GROQ_API_KEY=gsk_...                    # Also enables FREE Groq Vision!
+OLLAMA_BASE_URL=http://localhost:11434  # Also enables FREE Ollama Vision (needs `ollama pull llava`)
+
+# Optional paid vision (higher quality)
+# ANTHROPIC_API_KEY=sk-ant-...          # Claude Vision
+# OPENAI_API_KEY=sk-...                 # GPT-4 Vision
+
+# Optional: force a specific vision provider
+# VISION_PROVIDER=groq                  # groq | ollama | claude | gpt4
+```
+
+**What happens without any Vision provider:**
+- ✅ PDFs still upload successfully
+- ✅ Text extraction works (OCR on images)
+- ✅ Test cases generate normally
+- ℹ️ No semantic understanding of images (component recognition, layout analysis)
+- 💡 Recommended: Set `GROQ_API_KEY` for free vision, or `ollama pull llava` for local vision
+
+See [PROVIDER_INDEPENDENCE.md](PROVIDER_INDEPENDENCE.md) for detailed configuration matrix and [VISION_OPTIONAL_GUIDE.md](VISION_OPTIONAL_GUIDE.md) for fallback behavior and cost examples.
 
 ---
 

@@ -27,8 +27,7 @@ export const AIConfigSection: React.FC<Props> = ({
   const GROQ_FALLBACK_MODELS = [
     'openai/gpt-oss-120b',
     'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'mixtral-8x7b-32768',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
   ];
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -57,13 +56,16 @@ export const AIConfigSection: React.FC<Props> = ({
   const applyModels = (models: string[]) => {
     setAvailableModels(models);
     if (!models.includes(model)) {
-      const defaultModel =
-        models.find((m: string) =>
-          m.includes('llama-3.3-70b-versatile') ||
-          m.includes('openai/gpt-oss-120b') ||
-          m.includes('llama-3.1-70b') ||
-          m.includes('mixtral')
-        ) || models[0];
+      const defaultModel = provider === 'ollama'
+        ? models[0]
+        : (
+            models.find((m: string) =>
+              m.includes('llama-3.3-70b-versatile') ||
+              m.includes('openai/gpt-oss-120b') ||
+              m.includes('llama-3.1-70b') ||
+              m.includes('mixtral')
+            ) || models[0]
+          );
       setModel(defaultModel);
     }
   };

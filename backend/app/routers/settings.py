@@ -113,7 +113,7 @@ async def update_settings(config: AppConfig) -> Dict[str, Any]:
             "GROQ_DEFAULT_MODEL": (config.llm.groq.default_model or "llama-3.3-70b-versatile").strip(),
             "GROQ_DEFAULT_TEMPERATURE": str(config.llm.groq.default_temperature),
             "OLLAMA_BASE_URL": (config.llm.ollama.base_url or "http://localhost:11434").strip(),
-            "OLLAMA_DEFAULT_MODEL": (config.llm.ollama.default_model or "llama3.1").strip(),
+            "OLLAMA_DEFAULT_MODEL": (config.llm.ollama.default_model or "").strip(),
         }
 
         for key, value in updates.items():
