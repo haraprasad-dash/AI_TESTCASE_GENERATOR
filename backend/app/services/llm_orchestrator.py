@@ -224,6 +224,29 @@ class OllamaProvider(LLMProvider):
     
     def __init__(self, base_url: str = "http://localhost:11434"):
         self.base_url = base_url.rstrip("/")
+
+    def _truncate_error_text(self, text: str, limit: int = 800) -> str:
+        """Keep error payloads readable and bounded for logs/responses."""
+        cleaned = (text or "").strip()
+        if len(cleaned) <= limit:
+            return cleaned
+        return f"{cleaned[:limit]}... [truncated]"
+
+    def _format_http_status_error(self, prefix: str, error: httpx.HTTPStatusError) -> str:
+        """Build a rich error string for non-2xx HTTP responses."""
+        status = error.response.status_code if error.response is not None else "unknown"
+        reason = error.response.reason_phrase if error.response is not None else ""
+        body = ""
+        if error.response is not None:
+            try:
+                body = self._truncate_error_text(error.response.text)
+            except Exception:
+                body = "<unavailable>"
+
+        return (
+            f"{prefix}: HTTP {status} {reason} | "
+            f"{type(error).__name__}: {repr(error)} | body={body}"
+        )
     
     async def generate(
         self,
@@ -244,7 +267,7 @@ class OllamaProvider(LLMProvider):
             raise LLMError("No Ollama model configured. Select a model in AI Configuration or set OLLAMA_DEFAULT_MODEL.")
         
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
@@ -273,10 +296,27 @@ class OllamaProvider(LLMProvider):
                     total_tokens=(data.get("prompt_eval_count", 0) + data.get("eval_count", 0))
                 )
                 
-        except httpx.ConnectError:
-            raise LLMError(f"Cannot connect to Ollama at {self.base_url}. Is it running?")
+        except httpx.ConnectError as e:
+            raise LLMError(
+                f"Cannot connect to Ollama at {self.base_url}. "
+                f"Is it running? {type(e).__name__}: {repr(e)}"
+            )
+        except httpx.TimeoutException as e:
+            raise LLMError(
+                f"Ollama generation timed out after 300s at {self.base_url}. "
+                f"{type(e).__name__}: {repr(e)}"
+            )
+        except httpx.HTTPStatusError as e:
+            raise LLMError(self._format_http_status_error("Ollama generation failed", e))
+        except httpx.RequestError as e:
+            raise LLMError(
+                f"Ollama request failed: {type(e).__name__}: {repr(e)}"
+            )
         except Exception as e:
-            raise LLMError(f"Ollama generation failed: {e}")
+            detail = str(e).strip() or repr(e)
+            raise LLMError(
+                f"Ollama generation failed [{type(e).__name__}]: {detail}"
+            )
     
     async def generate_stream(
         self,
@@ -297,7 +337,7 @@ class OllamaProvider(LLMProvider):
             raise LLMError("No Ollama model configured. Select a model in AI Configuration or set OLLAMA_DEFAULT_MODEL.")
         
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 async with client.stream(
                     "POST",
                     f"{self.base_url}/api/generate",
@@ -325,8 +365,27 @@ class OllamaProvider(LLMProvider):
                             except json.JSONDecodeError:
                                 pass
                                 
+        except httpx.ConnectError as e:
+            raise LLMError(
+                f"Cannot connect to Ollama at {self.base_url} during stream. "
+                f"{type(e).__name__}: {repr(e)}"
+            )
+        except httpx.TimeoutException as e:
+            raise LLMError(
+                f"Ollama stream timed out after 300s at {self.base_url}. "
+                f"{type(e).__name__}: {repr(e)}"
+            )
+        except httpx.HTTPStatusError as e:
+            raise LLMError(self._format_http_status_error("Ollama stream failed", e))
+        except httpx.RequestError as e:
+            raise LLMError(
+                f"Ollama stream request failed: {type(e).__name__}: {repr(e)}"
+            )
         except Exception as e:
-            raise LLMError(f"Ollama stream failed: {e}")
+            detail = str(e).strip() or repr(e)
+            raise LLMError(
+                f"Ollama stream failed [{type(e).__name__}]: {detail}"
+            )
     
     async def test_connection(self) -> Dict[str, Any]:
         """Test Ollama connection."""
